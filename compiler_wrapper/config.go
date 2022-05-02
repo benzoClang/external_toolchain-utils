@@ -140,7 +140,7 @@ var crosHardenedConfig = &config{
 		"-Wno-unknown-warning-option",
 		"-Wno-section",
 		"-fuse-ld=lld",
-		"--unwindlib=libgcc",
+		"--unwindlib=libunwind",
 		"-Wno-final-dtor-non-final-class",
 		"-Werror=poison-system-directories",
 		"-fexperimental-new-pass-manager",
