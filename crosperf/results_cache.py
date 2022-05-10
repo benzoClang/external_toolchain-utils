@@ -27,12 +27,20 @@ import results_report
 import test_flag
 
 SCRATCH_DIR = os.path.expanduser('~/cros_scratch')
-RESULTS_FILE = 'results.txt'
+RESULTS_FILE = 'results.pickle'
 MACHINE_FILE = 'machine.txt'
 AUTOTEST_TARBALL = 'autotest.tbz2'
 RESULTS_TARBALL = 'results.tbz2'
 PERF_RESULTS_FILE = 'perf-results.txt'
 CACHE_KEYS_FILE = 'cache_keys.txt'
+
+
+class PidVerificationError(Exception):
+  """Error of perf PID verification in per-process mode."""
+
+
+class PerfDataReadError(Exception):
+  """Error of reading a perf.data header."""
 
 
 class Result(object):
@@ -58,6 +66,7 @@ class Result(object):
     self.results_file = []
     self.turbostat_log_file = ''
     self.cpustats_log_file = ''
+    self.cpuinfo_file = ''
     self.top_log_file = ''
     self.wait_time_log_file = ''
     self.chrome_version = ''
@@ -120,11 +129,19 @@ class Result(object):
       ret = self.ce.CopyFiles(file_to_copy, dest_file, recursive=False)
       if ret:
         raise IOError('Could not copy results file: %s' % file_to_copy)
+      file_index += 1
 
   def CopyResultsTo(self, dest_dir):
     self.CopyFilesTo(dest_dir, self.results_file)
     self.CopyFilesTo(dest_dir, self.perf_data_files)
     self.CopyFilesTo(dest_dir, self.perf_report_files)
+    extra_files = []
+    if self.top_log_file:
+      extra_files.append(self.top_log_file)
+    if self.cpuinfo_file:
+      extra_files.append(self.cpuinfo_file)
+    if extra_files:
+      self.CopyFilesTo(dest_dir, extra_files)
     if self.results_file or self.perf_data_files or self.perf_report_files:
       self._logger.LogOutput('Results files stored in %s.' % dest_dir)
 
@@ -134,12 +151,12 @@ class Result(object):
     # while tast runs hold output under TEST_NAME/.
     # Both ensure to be unique.
     result_dir_name = self.test_name if self.suite == 'tast' else 'results'
-    results_dir = self.FindFilesInResultsDir(
-        '-name %s' % result_dir_name).split('\n')[0]
+    results_dir = self.FindFilesInResultsDir('-name %s' %
+                                             result_dir_name).split('\n')[0]
 
     if not results_dir:
-      self._logger.LogOutput(
-          'WARNING: No results dir matching %r found' % result_dir_name)
+      self._logger.LogOutput('WARNING: No results dir matching %r found' %
+                             result_dir_name)
       return
 
     self.CreateTarball(results_dir, tarball)
@@ -180,9 +197,9 @@ class Result(object):
               keyvals_dict[key] = result_dict['value']
             elif 'values' in result_dict:
               values = result_dict['values']
-              if ('type' in result_dict and
-                  result_dict['type'] == 'list_of_scalar_values' and values and
-                  values != 'null'):
+              if ('type' in result_dict
+                  and result_dict['type'] == 'list_of_scalar_values' and values
+                  and values != 'null'):
                 keyvals_dict[key] = sum(values) / float(len(values))
               else:
                 keyvals_dict[key] = values
@@ -228,13 +245,14 @@ class Result(object):
     results_in_chroot = os.path.join(self.chromeos_root, 'chroot', 'tmp')
     if not self.temp_dir:
       self.temp_dir = tempfile.mkdtemp(dir=results_in_chroot)
-      command = 'cp -r {0}/* {1}'.format(self.results_dir, self.temp_dir)
+      command = f'cp -r {self.results_dir}/* {self.temp_dir}'
       self.ce.RunCommand(command, print_to_console=False)
 
-    command = ('./generate_test_report --no-color --csv %s' % (os.path.join(
-        '/tmp', os.path.basename(self.temp_dir))))
-    _, out, _ = self.ce.ChrootRunCommandWOutput(
-        self.chromeos_root, command, print_to_console=False)
+    command = ('./generate_test_report --no-color --csv %s' %
+               (os.path.join('/tmp', os.path.basename(self.temp_dir))))
+    _, out, _ = self.ce.ChrootRunCommandWOutput(self.chromeos_root,
+                                                command,
+                                                print_to_console=False)
     keyvals_dict = {}
     tmp_dir_in_chroot = misc.GetInsideChrootPath(self.chromeos_root,
                                                  self.temp_dir)
@@ -256,7 +274,7 @@ class Result(object):
     return keyvals_dict
 
   def GetSamples(self):
-    samples = 0
+    actual_samples = 0
     for perf_data_file in self.perf_data_files:
       chroot_perf_data_file = misc.GetInsideChrootPath(self.chromeos_root,
                                                        perf_data_file)
@@ -287,17 +305,53 @@ class Result(object):
       # Each line looks like this:
       #     45.42%        237210  chrome
       # And we want the second number which is the sample count.
-      sample = 0
+      samples = 0
       try:
         for line in result.split('\n'):
           attr = line.split()
           if len(attr) == 3 and '%' in attr[0]:
-            sample += int(attr[1])
+            samples += int(attr[1])
       except:
         raise RuntimeError('Cannot parse perf dso result')
 
-      samples += sample
-    return [samples, u'samples']
+      actual_samples += samples
+
+      # Remove idle cycles from the accumulated sample count.
+      perf_report_file = f'{perf_data_file}.report'
+      if not os.path.exists(perf_report_file):
+        raise RuntimeError(f'Missing perf report file: {perf_report_file}')
+
+      idle_functions = {
+          '[kernel.kallsyms]':
+          ('intel_idle', 'arch_cpu_idle', 'intel_idle', 'cpu_startup_entry',
+           'default_idle', 'cpu_idle_loop', 'do_idle'),
+      }
+      idle_samples = 0
+
+      with open(perf_report_file) as f:
+        try:
+          for line in f:
+            line = line.strip()
+            if not line or line[0] == '#':
+              continue
+            # Each line has the following fields,
+            # pylint: disable=line-too-long
+            # Overhead       Samples  Command          Shared Object         Symbol
+            # pylint: disable=line-too-long
+            # 1.48%          60       swapper          [kernel.kallsyms]     [k] intel_idle
+            # pylint: disable=line-too-long
+            # 0.00%          1        shill            libshill-net.so       [.] std::__1::vector<unsigned char, std::__1::allocator<unsigned char> >::vector<unsigned char const*>
+            _, samples, _, dso, _, function = line.split(None, 5)
+
+            if dso in idle_functions and function in idle_functions[dso]:
+              if self.log_level != 'verbose':
+                self._logger.LogOutput('Removing %s samples from %s in %s' %
+                                       (samples, function, dso))
+              idle_samples += int(samples)
+        except:
+          raise RuntimeError('Cannot parse perf report')
+      actual_samples -= idle_samples
+    return [actual_samples, u'samples']
 
   def GetResultsDir(self):
     if self.suite == 'tast':
@@ -334,11 +388,11 @@ class Result(object):
     result = self.FindFilesInResultsDir('-name perf_measurements').splitlines()
     if not result:
       if self.suite == 'telemetry_Crosperf':
-        result = \
-            self.FindFilesInResultsDir('-name histograms.json').splitlines()
+        result = (
+            self.FindFilesInResultsDir('-name histograms.json').splitlines())
       else:
-        result = \
-            self.FindFilesInResultsDir('-name results-chart.json').splitlines()
+        result = (self.FindFilesInResultsDir(
+            '-name results-chart.json').splitlines())
     return result
 
   def GetTurbostatFile(self):
@@ -348,6 +402,10 @@ class Result(object):
   def GetCpustatsFile(self):
     """Get cpustats log path string."""
     return self.FindFilesInResultsDir('-name cpustats.log').split('\n')[0]
+
+  def GetCpuinfoFile(self):
+    """Get cpustats log path string."""
+    return self.FindFilesInResultsDir('-name cpuinfo.log').split('\n')[0]
 
   def GetTopFile(self):
     """Get cpustats log path string."""
@@ -378,8 +436,8 @@ class Result(object):
                                                        perf_data_file)
       perf_report_file = '%s.report' % perf_data_file
       if os.path.exists(perf_report_file):
-        raise RuntimeError(
-            'Perf report file already exists: %s' % perf_report_file)
+        raise RuntimeError('Perf report file already exists: %s' %
+                           perf_report_file)
       chroot_perf_report_file = misc.GetInsideChrootPath(
           self.chromeos_root, perf_report_file)
       perf_path = os.path.join(self.chromeos_root, 'chroot', 'usr/bin/perf')
@@ -392,7 +450,8 @@ class Result(object):
 
       if debug_path:
         symfs = '--symfs ' + debug_path
-        vmlinux = '--vmlinux ' + os.path.join(debug_path, 'boot', 'vmlinux')
+        vmlinux = '--vmlinux ' + os.path.join(debug_path, 'usr', 'lib',
+                                              'debug', 'boot', 'vmlinux')
         kallsyms = ''
         print('** WARNING **: --kallsyms option not applied, no System.map-* '
               'for downloaded image.')
@@ -417,8 +476,8 @@ class Result(object):
         if self.log_level != 'verbose':
           self._logger.LogOutput('Perf report generated successfully.')
       else:
-        raise RuntimeError(
-            'Perf report not generated correctly. CMD: %s' % command)
+        raise RuntimeError('Perf report not generated correctly. CMD: %s' %
+                           command)
 
       # Add a keyval to the dictionary for the events captured.
       perf_report_files.append(
@@ -455,6 +514,7 @@ class Result(object):
     self.perf_report_files = self.GeneratePerfReportFiles()
     self.turbostat_log_file = self.GetTurbostatFile()
     self.cpustats_log_file = self.GetCpustatsFile()
+    self.cpuinfo_file = self.GetCpuinfoFile()
     self.top_log_file = self.GetTopFile()
     self.wait_time_log_file = self.GetWaitTimeFile()
     # TODO(asharif): Do something similar with perf stat.
@@ -487,9 +547,9 @@ class Result(object):
             values = value_dict['values']
             if not values:
               continue
-            if ('type' in value_dict and
-                value_dict['type'] == 'list_of_scalar_values' and
-                values != 'null'):
+            if ('type' in value_dict
+                and value_dict['type'] == 'list_of_scalar_values'
+                and values != 'null'):
               result = sum(values) / float(len(values))
             else:
               result = values
@@ -687,8 +747,9 @@ class Result(object):
             # order.
             heapq.heappush(cmd_top5_cpu_use[cmd_with_pid], round(cpu_use, 1))
 
-    for consumer, usage in sorted(
-        cmd_total_cpu_use.items(), key=lambda x: x[1], reverse=True):
+    for consumer, usage in sorted(cmd_total_cpu_use.items(),
+                                  key=lambda x: x[1],
+                                  reverse=True):
       # Iterate through commands by descending order of total CPU usage.
       topcmd = {
           'cmd': consumer,
@@ -831,15 +892,99 @@ class Result(object):
       keyvals[key] = [result, unit]
     return keyvals
 
+  def ReadPidFromPerfData(self):
+    """Read PIDs from perf.data files.
+
+    Extract PID from perf.data if "perf record" was running per process,
+    i.e. with "-p <PID>" and no "-a".
+
+    Returns:
+      pids: list of PIDs.
+
+    Raises:
+      PerfDataReadError when perf.data header reading fails.
+    """
+    cmd = ['/usr/bin/perf', 'report', '--header-only', '-i']
+    pids = []
+
+    for perf_data_path in self.perf_data_files:
+      perf_data_path_in_chroot = misc.GetInsideChrootPath(
+          self.chromeos_root, perf_data_path)
+      path_str = ' '.join(cmd + [perf_data_path_in_chroot])
+      status, output, _ = self.ce.ChrootRunCommandWOutput(
+          self.chromeos_root, path_str)
+      if status:
+        # Error of reading a perf.data profile is fatal.
+        raise PerfDataReadError(
+            f'Failed to read perf.data profile: {path_str}')
+
+      # Pattern to search a line with "perf record" command line:
+      # # cmdline : /usr/bin/perf record -e instructions -p 123"
+      cmdline_regex = re.compile(
+          r'^\#\scmdline\s:\s+(?P<cmd>.*perf\s+record\s+.*)$')
+      # Pattern to search PID in a command line.
+      pid_regex = re.compile(r'^.*\s-p\s(?P<pid>\d+)\s*.*$')
+      for line in output.splitlines():
+        cmd_match = cmdline_regex.match(line)
+        if cmd_match:
+          # Found a perf command line.
+          cmdline = cmd_match.group('cmd')
+          # '-a' is a system-wide mode argument.
+          if '-a' not in cmdline.split():
+            # It can be that perf was attached to PID and was still running in
+            # system-wide mode.
+            # We filter out this case here since it's not per-process.
+            pid_match = pid_regex.match(cmdline)
+            if pid_match:
+              pids.append(pid_match.group('pid'))
+          # Stop the search and move to the next perf.data file.
+          break
+      else:
+        # cmdline wasn't found in the header. It's a fatal error.
+        raise PerfDataReadError(
+            f'Perf command line is not found in {path_str}')
+    return pids
+
+  def VerifyPerfDataPID(self):
+    """Verify PIDs in per-process perf.data profiles.
+
+    Check that at list one top process is profiled if perf was running in
+    per-process mode.
+
+    Raises:
+      PidVerificationError if PID verification of per-process perf.data profiles
+      fail.
+    """
+    perf_data_pids = self.ReadPidFromPerfData()
+    if not perf_data_pids:
+      # In system-wide mode there are no PIDs.
+      self._logger.LogOutput('System-wide perf mode. Skip verification.')
+      return
+
+    # PIDs will be present only in per-process profiles.
+    # In this case we need to verify that profiles are collected on the
+    # hottest processes.
+    top_processes = [top_cmd['cmd'] for top_cmd in self.top_cmds]
+    # top_process structure: <cmd>-<pid>
+    top_pids = [top_process.split('-')[-1] for top_process in top_processes]
+    for top_pid in top_pids:
+      if top_pid in perf_data_pids:
+        self._logger.LogOutput('PID verification passed! '
+                               f'Top process {top_pid} is profiled.')
+        return
+    raise PidVerificationError(
+        f'top processes {top_processes} are missing in perf.data traces with'
+        f' PID: {perf_data_pids}.')
+
   def ProcessResults(self, use_cache=False):
     # Note that this function doesn't know anything about whether there is a
     # cache hit or miss. It should process results agnostic of the cache hit
     # state.
-    if (self.results_file and self.suite == 'telemetry_Crosperf' and
-        'histograms.json' in self.results_file[0]):
+    if (self.results_file and self.suite == 'telemetry_Crosperf'
+        and 'histograms.json' in self.results_file[0]):
       self.keyvals = self.ProcessHistogramsResults()
-    elif (self.results_file and self.suite != 'telemetry_Crosperf' and
-          'results-chart.json' in self.results_file[0]):
+    elif (self.results_file and self.suite != 'telemetry_Crosperf'
+          and 'results-chart.json' in self.results_file[0]):
       self.keyvals = self.ProcessChartResults()
     else:
       if not use_cache:
@@ -869,6 +1014,9 @@ class Result(object):
       cpustats = self.ProcessCpustatsResults()
     if self.top_log_file:
       self.top_cmds = self.ProcessTopResults()
+    # Verify that PID in non system-wide perf.data and top_cmds are matching.
+    if self.perf_data_files and self.top_cmds:
+      self.VerifyPerfDataPID()
     if self.wait_time_log_file:
       with open(self.wait_time_log_file) as f:
         wait_time = f.readline().strip()
@@ -949,8 +1097,8 @@ class Result(object):
 
   def CreateTarball(self, results_dir, tarball):
     if not results_dir.strip():
-      raise ValueError(
-          'Refusing to `tar` an empty results_dir: %r' % results_dir)
+      raise ValueError('Refusing to `tar` an empty results_dir: %r' %
+                       results_dir)
 
     ret = self.ce.RunCommand('cd %s && '
                              'tar '
@@ -990,18 +1138,19 @@ class Result(object):
       f.write(machine_manager.machine_checksum_string[self.label.name])
 
     if os.path.exists(cache_dir):
-      command = 'rm -rf {0}'.format(cache_dir)
+      command = f'rm -rf {cache_dir}'
       self.ce.RunCommand(command)
 
-    command = 'mkdir -p {0} && '.format(os.path.dirname(cache_dir))
-    command += 'chmod g+x {0} && '.format(temp_dir)
-    command += 'mv {0} {1}'.format(temp_dir, cache_dir)
+    parent_dir = os.path.dirname(cache_dir)
+    command = f'mkdir -p {parent_dir} && '
+    command += f'chmod g+x {temp_dir} && '
+    command += f'mv {temp_dir} {cache_dir}'
     ret = self.ce.RunCommand(command)
     if ret:
-      command = 'rm -rf {0}'.format(temp_dir)
+      command = f'rm -rf {temp_dir}'
       self.ce.RunCommand(command)
-      raise RuntimeError(
-          'Could not move dir %s to dir %s' % (temp_dir, cache_dir))
+      raise RuntimeError('Could not move dir %s to dir %s' %
+                         (temp_dir, cache_dir))
 
   @classmethod
   def CreateFromRun(cls,
@@ -1097,8 +1246,8 @@ class TelemetryResult(Result):
       self.err = pickle.load(f)
       self.retval = pickle.load(f)
 
-    self.chrome_version = \
-        super(TelemetryResult, self).GetChromeVersionFromCache(cache_dir)
+    self.chrome_version = (super(TelemetryResult,
+                                 self).GetChromeVersionFromCache(cache_dir))
     self.ProcessResults()
 
 
@@ -1160,10 +1309,10 @@ class ResultsCache(object):
     self.run_local = None
     self.cwp_dso = None
 
-  def Init(self, chromeos_image, chromeos_root, test_name, iteration, test_args,
-           profiler_args, machine_manager, machine, board, cache_conditions,
-           logger_to_use, log_level, label, share_cache, suite,
-           show_all_results, run_local, cwp_dso):
+  def Init(self, chromeos_image, chromeos_root, test_name, iteration,
+           test_args, profiler_args, machine_manager, machine, board,
+           cache_conditions, logger_to_use, log_level, label, share_cache,
+           suite, show_all_results, run_local, cwp_dso):
     self.chromeos_image = chromeos_image
     self.chromeos_root = chromeos_root
     self.test_name = test_name
@@ -1175,8 +1324,8 @@ class ResultsCache(object):
     self.machine_manager = machine_manager
     self.machine = machine
     self._logger = logger_to_use
-    self.ce = command_executer.GetCommandExecuter(
-        self._logger, log_level=log_level)
+    self.ce = command_executer.GetCommandExecuter(self._logger,
+                                                  log_level=log_level)
     self.label = label
     self.share_cache = share_cache
     self.suite = suite
@@ -1262,15 +1411,16 @@ class ResultsCache(object):
 
     temp_test_args = '%s %s %s' % (self.test_args, self.profiler_args,
                                    self.run_local)
-    test_args_checksum = hashlib.md5(temp_test_args.encode('utf-8')).hexdigest()
+    test_args_checksum = hashlib.md5(
+        temp_test_args.encode('utf-8')).hexdigest()
     return (image_path_checksum, self.test_name, str(self.iteration),
-            test_args_checksum, checksum, machine_checksum, machine_id_checksum,
-            str(self.CACHE_VERSION))
+            test_args_checksum, checksum, machine_checksum,
+            machine_id_checksum, str(self.CACHE_VERSION))
 
   def ReadResult(self):
     if CacheConditions.FALSE in self.cache_conditions:
       cache_dir = self.GetCacheDirForWrite()
-      command = 'rm -rf %s' % (cache_dir,)
+      command = 'rm -rf %s' % (cache_dir, )
       self.ce.RunCommand(command)
       return None
     cache_dir = self.GetCacheDirForRead()
@@ -1283,14 +1433,15 @@ class ResultsCache(object):
 
     if self.log_level == 'verbose':
       self._logger.LogOutput('Trying to read from cache dir: %s' % cache_dir)
-    result = Result.CreateFromCacheHit(self._logger, self.log_level, self.label,
-                                       self.machine, cache_dir, self.test_name,
-                                       self.suite, self.cwp_dso)
+    result = Result.CreateFromCacheHit(self._logger, self.log_level,
+                                       self.label, self.machine, cache_dir,
+                                       self.test_name, self.suite,
+                                       self.cwp_dso)
     if not result:
       return None
 
-    if (result.retval == 0 or
-        CacheConditions.RUN_SUCCEEDED not in self.cache_conditions):
+    if (result.retval == 0
+        or CacheConditions.RUN_SUCCEEDED not in self.cache_conditions):
       return result
 
     return None

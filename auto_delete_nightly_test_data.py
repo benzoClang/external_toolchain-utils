@@ -16,6 +16,7 @@ import datetime
 import os
 import re
 import shutil
+import shlex
 import sys
 import time
 
@@ -49,10 +50,10 @@ def CleanNumberedDir(s, dry_run=False):
     return False
 
   ## Now delete the numbered dir Before forcibly removing the directory, just
-  ## check 's' to make sure it is sane.  A valid dir to be removed must be
-  ## '/usr/local/google/crostc/(SUN|MON|TUE...|SAT)'.
-  valid_dir_pattern = (
-      '^' + NIGHTLY_TESTS_WORKSPACE + '/(' + '|'.join(DIR_BY_WEEKDAY) + ')')
+  ## check 's' to make sure it matches the expected pattern.  A valid dir to be
+  ## removed must be '/usr/local/google/crostc/(SUN|MON|TUE...|SAT)'.
+  valid_dir_pattern = ('^' + NIGHTLY_TESTS_WORKSPACE + '/(' +
+                       '|'.join(DIR_BY_WEEKDAY) + ')')
   if not re.search(valid_dir_pattern, s):
     print('Trying to delete an invalid dir "{0}" (must match "{1}"), '
           'please check.'.format(s, valid_dir_pattern))
@@ -192,8 +193,8 @@ def CleanOldCLs(days_to_preserve='1', dry_run=False):
   ce = command_executer.GetCommandExecuter()
   chromeos_root = os.path.join(constants.CROSTC_WORKSPACE, 'chromeos')
   # Find Old CLs.
-  old_cls_cmd = (
-      'gerrit --raw search "owner:me status:open age:%sd"' % days_to_preserve)
+  old_cls_cmd = ('gerrit --raw search "owner:me status:open age:%sd"' %
+                 days_to_preserve)
   _, cls, _ = ce.ChrootRunCommandWOutput(
       chromeos_root, old_cls_cmd, print_to_console=False)
   # Convert any whitespaces to spaces.
@@ -208,6 +209,24 @@ def CleanOldCLs(days_to_preserve='1', dry_run=False):
 
   return ce.ChrootRunCommand(
       chromeos_root, abandon_cls_cmd, print_to_console=False)
+
+
+def CleanChromeTelemetryTmpFiles(dry_run):
+  rv = 0
+  ce = command_executer.GetCommandExecuter()
+  tmp_dir = os.path.join(constants.CROSTC_WORKSPACE, 'chromeos', '.cache',
+                         'distfiles', 'chrome-src-internal', 'src', 'tmp')
+  cmd = f'rm -fr {shlex.quote(tmp_dir)}/tmp*telemetry_Crosperf'
+  if dry_run:
+    print(f'Going to execute:\n{cmd}')
+  else:
+    rv = ce.RunCommand(cmd, print_to_console=False)
+    if rv == 0:
+      print(f'Successfully cleaned chrome tree tmp directory ' f'{tmp_dir!r} .')
+    else:
+      print(f'Some directories were not removed under chrome tree '
+            f'tmp directory {tmp_dir!r}.')
+  return rv
 
 
 def Main(argv):
@@ -239,7 +258,10 @@ def Main(argv):
   # Clean CLs that are not updated in last 2 weeks.
   rv3 = CleanOldCLs('14', options.dry_run)
 
-  return rv + rv2 + rv3
+  # Clean telemetry temporaries from chrome source tree inside chroot.
+  rv4 = CleanChromeTelemetryTmpFiles(options.dry_run)
+
+  return rv + rv2 + rv3 + rv4
 
 
 if __name__ == '__main__':

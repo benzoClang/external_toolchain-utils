@@ -26,9 +26,14 @@ type config struct {
 	// by the user).
 	clangPostFlags []string
 	// Toolchain root path relative to the wrapper binary.
-	rootRelPath string
+	clangRootRelPath string
+	gccRootRelPath   string
 	// Directory to store errors that were prevented with -Wno-error.
 	newWarningsDir string
+	// Directory to store nits in when using `WITH_TIDY=tricium`.
+	triciumNitsDir string
+	// Directory to store crash artifacts in.
+	crashArtifactsDir string
 	// Version. Only used for printing via -print-cmd.
 	version string
 }
@@ -70,6 +75,10 @@ func getRealConfig() (*config, error) {
 	return config, nil
 }
 
+func isAndroidConfig() bool {
+	return ConfigName == "android"
+}
+
 func getConfig(configName string, useCCache bool, useLlvmNext bool, version string) (*config, error) {
 	cfg := config{}
 	switch configName {
@@ -88,6 +97,7 @@ func getConfig(configName string, useCCache bool, useLlvmNext bool, version stri
 	cfg.useLlvmNext = useLlvmNext
 	if useLlvmNext {
 		cfg.clangFlags = append(cfg.clangFlags, llvmNextFlags...)
+		cfg.clangPostFlags = append(cfg.clangPostFlags, llvmNextPostFlags...)
 	}
 	cfg.version = version
 	return &cfg, nil
@@ -96,8 +106,12 @@ func getConfig(configName string, useCCache bool, useLlvmNext bool, version stri
 // Full hardening.
 // Temporarily disable function splitting because of chromium:434751.
 var crosHardenedConfig = &config{
-	rootRelPath: "../../../../..",
+	clangRootRelPath: "../..",
+	gccRootRelPath:   "../../../../..",
+	// Pass "-fcommon" till the packages are fixed to work with new clang/gcc
+	// default of "-fno-common", crbug.com/1060413.
 	commonFlags: []string{
+		"-fcommon",
 		"-fstack-protector-strong",
 		"-fPIE",
 		"-pie",
@@ -113,32 +127,45 @@ var crosHardenedConfig = &config{
 	// Temporarily add no-unknown-warning-option to deal with old clang versions.
 	// Temporarily disable Wsection since kernel gets a bunch of these. chromium:778867
 	// Disable "-faddrsig" since it produces object files that strip doesn't understand, chromium:915742.
-	// Pass "-fcommon" till the packages are fixed to work with new clang default
-	// "-fno-common", crbug.com/1060413.
+	// crbug.com/1103065: -grecord-gcc-switches pollutes the Goma cache;
+	//   removed that flag for now.
+	// Temporarily disable Wdeprecated-declarations. b/193860318
+
 	clangFlags: []string{
 		"-Qunused-arguments",
-		"-grecord-gcc-switches",
 		"-fno-addrsig",
-		"-fcommon",
+		"-fdebug-default-version=5",
 		"-Wno-tautological-constant-compare",
 		"-Wno-tautological-unsigned-enum-zero-compare",
 		"-Wno-unknown-warning-option",
 		"-Wno-section",
-		"-static-libgcc",
 		"-fuse-ld=lld",
+		"--unwindlib=libgcc",
 		"-Wno-final-dtor-non-final-class",
 		"-Werror=poison-system-directories",
+		"-fexperimental-new-pass-manager",
+		"-Wno-compound-token-split-by-macro",
+		"-Wno-deprecated-declarations",
 	},
+
+	// Temporarily disable Wdeprecated-copy. b/191479033
 	clangPostFlags: []string{
 		"-Wno-implicit-int-float-conversion",
+		"-Wno-compound-token-split-by-space",
+		"-Wno-string-concatenation",
+		"-Wno-deprecated-copy",
+		"-Wno-unused-but-set-variable",
 	},
-	newWarningsDir: "/tmp/fatal_clang_warnings",
+	newWarningsDir:    "/tmp/fatal_clang_warnings",
+	triciumNitsDir:    "/tmp/linting_output/clang-tidy",
+	crashArtifactsDir: "/tmp/clang_crash_diagnostics",
 }
 
 // Flags to be added to non-hardened toolchain.
 var crosNonHardenedConfig = &config{
-	rootRelPath: "../../../../..",
-	commonFlags: []string{},
+	clangRootRelPath: "../..",
+	gccRootRelPath:   "../../../../..",
+	commonFlags:      []string{},
 	gccFlags: []string{
 		"-Wno-maybe-uninitialized",
 		"-Wno-unused-local-typedefs",
@@ -148,27 +175,44 @@ var crosNonHardenedConfig = &config{
 	// Temporarily disable tautological-*-compare chromium:778316.
 	// Temporarily add no-unknown-warning-option to deal with old clang versions.
 	// Temporarily disable Wsection since kernel gets a bunch of these. chromium:778867
+	// Temporarily disable Wdeprecated-declarations. b/193860318
 	clangFlags: []string{
 		"-Qunused-arguments",
+		"-fdebug-default-version=5",
 		"-Wno-tautological-constant-compare",
 		"-Wno-tautological-unsigned-enum-zero-compare",
 		"-Wno-unknown-warning-option",
 		"-Wno-section",
-		"-static-libgcc",
 		"-Wno-final-dtor-non-final-class",
 		"-Werror=poison-system-directories",
+		"-fexperimental-new-pass-manager",
+		"-Wno-compound-token-split-by-macro",
+		"-Wno-deprecated-declarations",
 	},
+
+	// Temporarily disable Wdeprecated-copy. b/191479033
 	clangPostFlags: []string{
 		"-Wno-implicit-int-float-conversion",
+		"-Wno-compound-token-split-by-space",
+		"-Wno-string-concatenation",
+		"-Wno-deprecated-copy",
+		"-Wno-unused-but-set-variable",
 	},
-	newWarningsDir: "/tmp/fatal_clang_warnings",
+	newWarningsDir:    "/tmp/fatal_clang_warnings",
+	triciumNitsDir:    "/tmp/linting_output/clang-tidy",
+	crashArtifactsDir: "/tmp/clang_crash_diagnostics",
 }
 
 // Flags to be added to host toolchain.
 var crosHostConfig = &config{
-	isHostWrapper: true,
-	rootRelPath:   "../..",
-	commonFlags:   []string{},
+	isHostWrapper:    true,
+	clangRootRelPath: "../..",
+	gccRootRelPath:   "../..",
+	// Pass "-fcommon" till the packages are fixed to work with new clang/gcc
+	// default of "-fno-common", crbug.com/1060413.
+	commonFlags: []string{
+		"-fcommon",
+	},
 	gccFlags: []string{
 		"-Wno-maybe-uninitialized",
 		"-Wno-unused-local-typedefs",
@@ -176,35 +220,48 @@ var crosHostConfig = &config{
 	},
 	// Temporarily disable tautological-*-compare chromium:778316.
 	// Temporarily add no-unknown-warning-option to deal with old clang versions.
-	// Pass "-fcommon" till the packages are fixed to work with new clang default
-	// "-fno-common", crbug.com/1060413.
+	// crbug.com/1103065: -grecord-gcc-switches pollutes the Goma cache;
+	//   removed that flag for now.
+	// Temporarily disable Wdeprecated-declarations. b/193860318
 	clangFlags: []string{
 		"-Qunused-arguments",
-		"-grecord-gcc-switches",
 		"-fno-addrsig",
-		"-fcommon",
 		"-fuse-ld=lld",
+		"-fdebug-default-version=5",
 		"-Wno-unused-local-typedefs",
-		"-Wno-deprecated-declarations",
 		"-Wno-tautological-constant-compare",
 		"-Wno-tautological-unsigned-enum-zero-compare",
 		"-Wno-final-dtor-non-final-class",
 		"-Werror=poison-system-directories",
 		"-Wno-unknown-warning-option",
+		"-fexperimental-new-pass-manager",
+		"-Wno-compound-token-split-by-macro",
+		"-Wno-deprecated-declarations",
 	},
+
+	// Temporarily disable Wdeprecated-copy. b/191479033
 	clangPostFlags: []string{
 		"-Wno-implicit-int-float-conversion",
+		"-Wno-compound-token-split-by-space",
+		"-Wno-string-concatenation",
+		"-Wno-deprecated-copy",
+		"-Wno-unused-but-set-variable",
 	},
-	newWarningsDir: "/tmp/fatal_clang_warnings",
+	newWarningsDir:    "/tmp/fatal_clang_warnings",
+	triciumNitsDir:    "/tmp/linting_output/clang-tidy",
+	crashArtifactsDir: "/tmp/clang_crash_diagnostics",
 }
 
 var androidConfig = &config{
-	isHostWrapper:    false,
-	isAndroidWrapper: true,
-	rootRelPath:      "./",
-	commonFlags:      []string{},
-	gccFlags:         []string{},
-	clangFlags:       []string{},
-	clangPostFlags:   []string{},
-	newWarningsDir:   "",
+	isHostWrapper:     false,
+	isAndroidWrapper:  true,
+	gccRootRelPath:    "./",
+	clangRootRelPath:  "./",
+	commonFlags:       []string{},
+	gccFlags:          []string{},
+	clangFlags:        []string{},
+	clangPostFlags:    []string{},
+	newWarningsDir:    "",
+	triciumNitsDir:    "",
+	crashArtifactsDir: "",
 }

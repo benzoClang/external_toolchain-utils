@@ -14,7 +14,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
+	"time"
 )
 
 const (
@@ -43,7 +46,14 @@ type testContext struct {
 	stdinBuffer  bytes.Buffer
 	stdoutBuffer bytes.Buffer
 	stderrBuffer bytes.Buffer
+
+	umaskRestoreAction func()
 }
+
+// We have some tests which modify our umask, and other tests which depend upon the value of our
+// umask remaining consistent. This lock serializes those. Please use `NoteTestWritesToUmask()` and
+// `NoteTestDependsOnUmask()` on `testContext` rather than using this directly.
+var umaskModificationLock sync.RWMutex
 
 func withTestContext(t *testing.T, work func(ctx *testContext)) {
 	t.Parallel()
@@ -62,10 +72,47 @@ func withTestContext(t *testing.T, work func(ctx *testContext)) {
 	}
 	ctx.updateConfig(&config{})
 
+	defer ctx.maybeReleaseUmaskDependency()
 	work(&ctx)
 }
 
 var _ env = (*testContext)(nil)
+
+func (ctx *testContext) umask(mask int) (oldmask int) {
+	if ctx.umaskRestoreAction == nil {
+		panic("Umask operations requested in test without declaring a umask dependency")
+	}
+	return syscall.Umask(mask)
+}
+
+func (ctx *testContext) initUmaskDependency(lockFn func(), unlockFn func()) {
+	if ctx.umaskRestoreAction != nil {
+		// Use a panic so we get a backtrace.
+		panic("Multiple notes of a test depending on the value of `umask` given -- tests " +
+			"are only allowed up to one.")
+	}
+
+	lockFn()
+	ctx.umaskRestoreAction = unlockFn
+}
+
+func (ctx *testContext) maybeReleaseUmaskDependency() {
+	if ctx.umaskRestoreAction != nil {
+		ctx.umaskRestoreAction()
+	}
+}
+
+// Note that the test depends on a stable value for the process' umask.
+func (ctx *testContext) NoteTestReadsFromUmask() {
+	ctx.initUmaskDependency(umaskModificationLock.RLock, umaskModificationLock.RUnlock)
+}
+
+// Note that the test modifies the process' umask. This implies a dependency on the process' umask,
+// so it's an error to call both NoteTestWritesToUmask and NoteTestReadsFromUmask from the same
+// test.
+func (ctx *testContext) NoteTestWritesToUmask() {
+	ctx.initUmaskDependency(umaskModificationLock.Lock, umaskModificationLock.Unlock)
+}
 
 func (ctx *testContext) getenv(key string) (string, bool) {
 	for i := len(ctx.env) - 1; i >= 0; i-- {
@@ -114,6 +161,10 @@ func (ctx *testContext) run(cmd *command, stdin io.Reader, stdout io.Writer, std
 	return nil
 }
 
+func (ctx *testContext) runWithTimeout(cmd *command, duration time.Duration) error {
+	return ctx.exec(cmd)
+}
+
 func (ctx *testContext) exec(cmd *command) error {
 	ctx.cmdCount++
 	ctx.lastCmd = cmd
@@ -141,6 +192,8 @@ func (ctx *testContext) mustFail(exitCode int) string {
 func (ctx *testContext) updateConfig(cfg *config) {
 	*ctx.cfg = *cfg
 	ctx.cfg.newWarningsDir = filepath.Join(ctx.tempDir, "fatal_clang_warnings")
+	ctx.cfg.triciumNitsDir = filepath.Join(ctx.tempDir, "tricium_nits")
+	ctx.cfg.crashArtifactsDir = filepath.Join(ctx.tempDir, "clang_crash_diagnostics")
 }
 
 func (ctx *testContext) newCommand(path string, args ...string) *command {

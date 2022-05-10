@@ -318,6 +318,8 @@ func TestLogWarningsWhenDoubleBuildFails(t *testing.T) {
 
 func withForceDisableWErrorTestContext(t *testing.T, work func(ctx *testContext)) {
 	withTestContext(t, func(ctx *testContext) {
+		ctx.NoteTestWritesToUmask()
+
 		ctx.env = []string{"FORCE_DISABLE_WERROR=1"}
 		work(ctx)
 	})
@@ -412,13 +414,21 @@ func TestAndroidDisableWerror(t *testing.T) {
 
 		// Disable werror ON
 		ctx.cfg.useLlvmNext = true
-		if !shouldForceDisableWerror(ctx, ctx.cfg) {
+		if !shouldForceDisableWerror(ctx, ctx.cfg, gccType) {
+			t.Errorf("disable Werror not enabled for Android with useLlvmNext")
+		}
+
+		if !shouldForceDisableWerror(ctx, ctx.cfg, clangType) {
 			t.Errorf("disable Werror not enabled for Android with useLlvmNext")
 		}
 
 		// Disable werror OFF
 		ctx.cfg.useLlvmNext = false
-		if shouldForceDisableWerror(ctx, ctx.cfg) {
+		if shouldForceDisableWerror(ctx, ctx.cfg, gccType) {
+			t.Errorf("disable-Werror enabled for Android without useLlvmNext")
+		}
+
+		if shouldForceDisableWerror(ctx, ctx.cfg, clangType) {
 			t.Errorf("disable-Werror enabled for Android without useLlvmNext")
 		}
 	})
@@ -426,8 +436,24 @@ func TestAndroidDisableWerror(t *testing.T) {
 
 func TestChromeOSNoForceDisableWerror(t *testing.T) {
 	withTestContext(t, func(ctx *testContext) {
-		if shouldForceDisableWerror(ctx, ctx.cfg) {
+		if shouldForceDisableWerror(ctx, ctx.cfg, gccType) {
 			t.Errorf("disable Werror enabled for ChromeOS without FORCE_DISABLE_WERROR set")
+		}
+
+		if shouldForceDisableWerror(ctx, ctx.cfg, clangType) {
+			t.Errorf("disable Werror enabled for ChromeOS without FORCE_DISABLE_WERROR set")
+		}
+	})
+}
+
+func TestChromeOSForceDisableWerrorOnlyAppliesToClang(t *testing.T) {
+	withForceDisableWErrorTestContext(t, func(ctx *testContext) {
+		if !shouldForceDisableWerror(ctx, ctx.cfg, clangType) {
+			t.Errorf("Disable -Werror should be enabled for clang.")
+		}
+
+		if shouldForceDisableWerror(ctx, ctx.cfg, gccType) {
+			t.Errorf("Disable -Werror should be disabled for gcc.")
 		}
 	})
 }
@@ -499,4 +525,69 @@ func TestClangTidyDoubleBuildClangError(t *testing.T) {
 			t.Errorf("expected 2 calls. Got: %d", ctx.cmdCount)
 		}
 	})
+}
+
+func TestProcPidStatParsingWorksAsIntended(t *testing.T) {
+	t.Parallel()
+
+	type expected struct {
+		parent int
+		ok     bool
+	}
+
+	testCases := []struct {
+		input    string
+		expected expected
+	}{
+		{
+			input: "2556041 (cat) R 2519408 2556041 2519408 34818 2556041 4194304",
+			expected: expected{
+				parent: 2519408,
+				ok:     true,
+			},
+		},
+		{
+			input: "2556041 (c a t) R 2519408 2556041 2519408 34818 2556041 4194304",
+			expected: expected{
+				parent: 2519408,
+				ok:     true,
+			},
+		},
+		{
+			input: "",
+			expected: expected{
+				ok: false,
+			},
+		},
+		{
+			input: "foo (bar)",
+			expected: expected{
+				ok: false,
+			},
+		},
+		{
+			input: "foo (bar) baz",
+			expected: expected{
+				ok: false,
+			},
+		},
+		{
+			input: "foo (bar) baz 1qux2",
+			expected: expected{
+				ok: false,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		parent, ok := parseParentPidFromPidStat(tc.input)
+		if tc.expected.ok != ok {
+			t.Errorf("Got ok=%v when parsing %q; expected %v", ok, tc.input, tc.expected.ok)
+			continue
+		}
+
+		if tc.expected.parent != parent {
+			t.Errorf("Got parent=%v when parsing %q; expected %v", parent, tc.input, tc.expected.parent)
+		}
+	}
 }

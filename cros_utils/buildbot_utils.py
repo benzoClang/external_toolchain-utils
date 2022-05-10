@@ -50,8 +50,8 @@ def PeekTrybotImage(chromeos_root, buildbucket_id):
                   and url looks like:
     gs://chromeos-image-archive/trybot-elm-release-tryjob/R67-10468.0.0-b20789
   """
-  command = (
-      'cros buildresult --report json --buildbucket-id %s' % buildbucket_id)
+  command = ('cros buildresult --report json --buildbucket-id %s' %
+             buildbucket_id)
   rc, out, _ = RunCommandInPath(chromeos_root, command)
 
   # Current implementation of cros buildresult returns fail when a job is still
@@ -194,9 +194,9 @@ def GetTrybotImage(chromeos_root,
     image = ''
 
   if not image:
-    logger.GetLogger().LogError(
-        'Trybot job (buildbucket id: %s) failed with'
-        'status %s; no trybot image generated. ' % (buildbucket_id, status))
+    logger.GetLogger().LogError('Trybot job (buildbucket id: %s) failed with'
+                                'status %s; no trybot image generated. ' %
+                                (buildbucket_id, status))
   else:
     # Convert full gs path to what crosperf expects. For example, convert
     # gs://chromeos-image-archive/trybot-elm-release-tryjob/R67-10468.0.0-b20789
@@ -226,13 +226,13 @@ def WaitForImage(chromeos_root, build):
   while elapsed_time < TIME_OUT:
     if DoesImageExist(chromeos_root, build):
       return
-    logger.GetLogger().LogOutput(
-        'Image %s not ready, waiting for 10 minutes' % build)
+    logger.GetLogger().LogOutput('Image %s not ready, waiting for 10 minutes' %
+                                 build)
     time.sleep(SLEEP_TIME)
     elapsed_time += SLEEP_TIME
 
-  logger.GetLogger().LogOutput(
-      'Image %s not found, waited for %d hours' % (build, (TIME_OUT / 3600)))
+  logger.GetLogger().LogOutput('Image %s not found, waited for %d hours' %
+                               (build, (TIME_OUT / 3600)))
   raise BuildbotTimeout('Timeout while waiting for image %s' % build)
 
 
@@ -253,7 +253,7 @@ def GetLatestImage(chromeos_root, path):
   candidates.sort(reverse=True)
   for c in candidates:
     build = '%s/R%d-%d.%d.%d' % (path, c[0], c[1], c[2], c[3])
-    # Blacklist "R79-12384.0.0" image released by mistake.
+    # Denylist "R79-12384.0.0" image released by mistake.
     # TODO(crbug.com/992242): Remove the filter by 2019-09-05.
     if c == [79, 12384, 0, 0]:
       continue

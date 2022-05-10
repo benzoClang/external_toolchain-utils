@@ -13,11 +13,14 @@ import enum
 import errno
 import json
 import os
+import subprocess
 import sys
 
 import chroot
 import get_llvm_hash
+import git_llvm_rev
 import modify_a_tryjob
+import update_chromeos_llvm_hash
 import update_tryjob_status
 
 
@@ -26,11 +29,6 @@ class BisectionExitStatus(enum.Enum):
 
   # Means that there are no more revisions available to bisect.
   BISECTION_COMPLETE = 126
-
-
-def is_file_and_json(json_file):
-  """Validates that the file exists and is a JSON file."""
-  return os.path.isfile(json_file) and json_file.endswith('.json')
 
 
 def GetCommandLineArgs():
@@ -54,18 +52,16 @@ def GetCommandLineArgs():
       'the first bad version (default: %(default)s)')
 
   # Add argument for the good LLVM revision for bisection.
-  parser.add_argument(
-      '--start_rev',
-      required=True,
-      type=int,
-      help='The good revision for the bisection.')
+  parser.add_argument('--start_rev',
+                      required=True,
+                      type=int,
+                      help='The good revision for the bisection.')
 
   # Add argument for the bad LLVM revision for bisection.
-  parser.add_argument(
-      '--end_rev',
-      required=True,
-      type=int,
-      help='The bad revision for the bisection.')
+  parser.add_argument('--end_rev',
+                      required=True,
+                      type=int,
+                      help='The bad revision for the bisection.')
 
   # Add argument for the absolute path to the file that contains information on
   # the previous tested svn version.
@@ -91,60 +87,53 @@ def GetCommandLineArgs():
       'of updating the packages')
 
   # Add argument for custom options for the tryjob.
-  parser.add_argument(
-      '--options',
-      required=False,
-      nargs='+',
-      help='options to use for the tryjob testing')
+  parser.add_argument('--options',
+                      required=False,
+                      nargs='+',
+                      help='options to use for the tryjob testing')
 
   # Add argument for the builder to use for the tryjob.
-  parser.add_argument(
-      '--builder', required=True, help='builder to use for the tryjob testing')
+  parser.add_argument('--builder',
+                      required=True,
+                      help='builder to use for the tryjob testing')
 
   # Add argument for the description of the tryjob.
-  parser.add_argument(
-      '--description',
-      required=False,
-      nargs='+',
-      help='the description of the tryjob')
+  parser.add_argument('--description',
+                      required=False,
+                      nargs='+',
+                      help='the description of the tryjob')
 
   # Add argument for a specific chroot path.
-  parser.add_argument(
-      '--chroot_path',
-      default=cros_root,
-      help='the path to the chroot (default: %(default)s)')
+  parser.add_argument('--chroot_path',
+                      default=cros_root,
+                      help='the path to the chroot (default: %(default)s)')
 
   # Add argument for whether to display command contents to `stdout`.
-  parser.add_argument(
-      '--verbose',
-      action='store_true',
-      help='display contents of a command to the terminal '
-      '(default: %(default)s)')
+  parser.add_argument('--verbose',
+                      action='store_true',
+                      help='display contents of a command to the terminal '
+                      '(default: %(default)s)')
+
+  # Add argument for whether to display command contents to `stdout`.
+  parser.add_argument('--nocleanup',
+                      action='store_false',
+                      dest='cleanup',
+                      help='Abandon CLs created for bisectoin')
 
   args_output = parser.parse_args()
 
   assert args_output.start_rev < args_output.end_rev, (
-      'Start revision %d is >= end revision %d' % (args_output.start_rev,
-                                                   args_output.end_rev))
+      'Start revision %d is >= end revision %d' %
+      (args_output.start_rev, args_output.end_rev))
 
   if args_output.last_tested and not args_output.last_tested.endswith('.json'):
-    raise ValueError(
-        'Filed provided %s does not end in ".json"' % args_output.last_tested)
+    raise ValueError('Filed provided %s does not end in ".json"' %
+                     args_output.last_tested)
 
   return args_output
 
 
-def _ValidateStartAndEndAgainstJSONStartAndEnd(start, end, json_start,
-                                               json_end):
-  """Valides that the command line arguments are the same as the JSON."""
-
-  if start != json_start or end != json_end:
-    raise ValueError('The start %d or the end %d version provided is '
-                     'different than "start" %d or "end" %d in the .JSON '
-                     'file' % (start, end, json_start, json_end))
-
-
-def GetStartAndEndRevision(start, end, tryjobs):
+def GetRemainingRange(start, end, tryjobs):
   """Gets the start and end intervals in 'json_file'.
 
   Args:
@@ -180,8 +169,7 @@ def GetStartAndEndRevision(start, end, tryjobs):
 
   all_bad_revisions = [end]
   all_bad_revisions.extend(
-      cur_tryjob['rev']
-      for cur_tryjob in tryjobs
+      cur_tryjob['rev'] for cur_tryjob in tryjobs
       if cur_tryjob['status'] == update_tryjob_status.TryjobStatus.BAD.value)
 
   # The minimum value for the 'bad' field in the tryjobs is the new end
@@ -190,8 +178,7 @@ def GetStartAndEndRevision(start, end, tryjobs):
 
   all_good_revisions = [start]
   all_good_revisions.extend(
-      cur_tryjob['rev']
-      for cur_tryjob in tryjobs
+      cur_tryjob['rev'] for cur_tryjob in tryjobs
       if cur_tryjob['status'] == update_tryjob_status.TryjobStatus.GOOD.value)
 
   # The maximum value for the 'good' field in the tryjobs is the new start
@@ -211,8 +198,8 @@ def GetStartAndEndRevision(start, end, tryjobs):
   pending_revisions = {
       tryjob['rev']
       for tryjob in tryjobs
-      if tryjob['status'] == update_tryjob_status.TryjobStatus.PENDING.value and
-      good_rev < tryjob['rev'] < bad_rev
+      if tryjob['status'] == update_tryjob_status.TryjobStatus.PENDING.value
+      and good_rev < tryjob['rev'] < bad_rev
   }
 
   # Find all revisions that are to be skipped within 'good_rev' and 'bad_rev'.
@@ -223,150 +210,61 @@ def GetStartAndEndRevision(start, end, tryjobs):
   skip_revisions = {
       tryjob['rev']
       for tryjob in tryjobs
-      if tryjob['status'] == update_tryjob_status.TryjobStatus.SKIP.value and
-      good_rev < tryjob['rev'] < bad_rev
+      if tryjob['status'] == update_tryjob_status.TryjobStatus.SKIP.value
+      and good_rev < tryjob['rev'] < bad_rev
   }
 
   return good_rev, bad_rev, pending_revisions, skip_revisions
 
 
-def GetRevisionsBetweenBisection(start, end, parallel, src_path,
-                                 pending_revisions, skip_revisions):
-  """Gets the revisions between 'start' and 'end'.
-
-  Sometimes, the LLVM source tree's revisions do not increment by 1 (there is
-  a jump), so need to construct a list of all revisions that are NOT missing
-  between 'start' and 'end'. Then, the step amount (i.e. length of the list
-  divided by ('parallel' + 1)) will be used for indexing into the list.
-
-  Args:
-    start: The start revision.
-    end: The end revision.
-    parallel: The number of tryjobs to create between 'start' and 'end'.
-    src_path: The absolute path to the LLVM source tree to use.
-    pending_revisions: A set containing 'pending' revisions that are between
-    'start' and 'end'.
-    skip_revisions: A set containing revisions between 'start' and 'end' that
-    are to be skipped.
-
-  Returns:
-    A list of revisions between 'start' and 'end'.
-  """
-
-  valid_revisions = []
-
-  # Start at ('start' + 1) because 'start' is the good revision.
-  #
-  # FIXME: Searching for each revision from ('start' + 1) up to 'end' in the
-  # LLVM source tree is a quadratic algorithm. It's a good idea to optimize
-  # this.
-  for cur_revision in range(start + 1, end):
-    try:
-      if cur_revision not in pending_revisions and \
-          cur_revision not in skip_revisions:
-        # Verify that the current revision exists by finding its corresponding
-        # git hash in the LLVM source tree.
-        get_llvm_hash.GetGitHashFrom(src_path, cur_revision)
-        valid_revisions.append(cur_revision)
-    except ValueError:
-      # Could not find the git hash for the current revision.
-      continue
-
-  # ('parallel' + 1) so that the last revision in the list is not close to
-  # 'end' (have a bit more coverage).
-  index_step = len(valid_revisions) // (parallel + 1)
-
-  if not index_step:
-    index_step = 1
-
-  result = [valid_revisions[index] \
-            for index in range(0, len(valid_revisions), index_step)]
-
-  return result
-
-
-def GetRevisionsListAndHashList(start, end, parallel, src_path,
-                                pending_revisions, skip_revisions):
+def GetCommitsBetween(start, end, parallel, src_path, pending_revisions,
+                      skip_revisions):
   """Determines the revisions between start and end."""
 
-  new_llvm = get_llvm_hash.LLVMHash()
+  with get_llvm_hash.LLVMHash().CreateTempDirectory() as temp_dir:
+    # We have guaranteed contiguous revision numbers after this,
+    # and that guarnatee simplifies things considerably, so we don't
+    # support anything before it.
+    assert start >= git_llvm_rev.base_llvm_revision, f'{start} was too long ago'
 
-  with new_llvm.CreateTempDirectory() as temp_dir:
     with get_llvm_hash.CreateTempLLVMRepo(temp_dir) as new_repo:
       if not src_path:
         src_path = new_repo
-
-      # Get a list of revisions between start and end.
-      revisions = GetRevisionsBetweenBisection(
-          start, end, parallel, src_path, pending_revisions, skip_revisions)
-
+      index_step = (end - (start + 1)) // (parallel + 1)
+      if not index_step:
+        index_step = 1
+      revisions = [
+          rev for rev in range(start + 1, end, index_step)
+          if rev not in pending_revisions and rev not in skip_revisions
+      ]
       git_hashes = [
           get_llvm_hash.GetGitHashFrom(src_path, rev) for rev in revisions
       ]
-
-  return revisions, git_hashes
-
-
-def DieWithNoRevisionsError(start, end, skip_revisions, pending_revisions):
-  """Raises a ValueError exception with useful information."""
-
-  no_revisions_message = ('No revisions between start %d and end '
-                          '%d to create tryjobs' % (start, end))
-
-  if pending_revisions:
-    no_revisions_message += '\nThe following tryjobs are pending:\n' \
-        + '\n'.join(str(rev) for rev in pending_revisions)
-
-  if skip_revisions:
-    no_revisions_message += '\nThe following tryjobs were skipped:\n' \
-        + '\n'.join(str(rev) for rev in skip_revisions)
-
-  raise ValueError(no_revisions_message)
+      return revisions, git_hashes
 
 
-def CheckForExistingTryjobsInRevisionsToLaunch(revisions, jobs):
-  """Checks if a revision in 'revisions' exists in 'jobs' list."""
-
-  for rev in revisions:
-    if update_tryjob_status.FindTryjobIndex(rev, jobs) is not None:
-      raise ValueError('Revision %d exists already in "jobs"' % rev)
-
-
-def UpdateBisection(revisions, git_hashes, bisect_contents, last_tested,
-                    update_packages, chroot_path, patch_metadata_file,
-                    extra_change_lists, options, builder, verbose):
+def Bisect(revisions, git_hashes, bisect_state, last_tested, update_packages,
+           chroot_path, patch_metadata_file, extra_change_lists, options,
+           builder, verbose):
   """Adds tryjobs and updates the status file with the new tryjobs."""
 
   try:
     for svn_revision, git_hash in zip(revisions, git_hashes):
-      tryjob_dict = modify_a_tryjob.AddTryjob(
-          update_packages, git_hash, svn_revision, chroot_path,
-          patch_metadata_file, extra_change_lists, options, builder, verbose,
-          svn_revision)
+      tryjob_dict = modify_a_tryjob.AddTryjob(update_packages, git_hash,
+                                              svn_revision, chroot_path,
+                                              patch_metadata_file,
+                                              extra_change_lists, options,
+                                              builder, verbose, svn_revision)
 
-      bisect_contents['jobs'].append(tryjob_dict)
+      bisect_state['jobs'].append(tryjob_dict)
   finally:
     # Do not want to lose progress if there is an exception.
     if last_tested:
       new_file = '%s.new' % last_tested
       with open(new_file, 'w') as json_file:
-        json.dump(bisect_contents, json_file, indent=4, separators=(',', ': '))
+        json.dump(bisect_state, json_file, indent=4, separators=(',', ': '))
 
       os.rename(new_file, last_tested)
-
-
-def _NoteCompletedBisection(last_tested, src_path, end):
-  """Prints that bisection is complete."""
-
-  print('Finished bisecting for %s' % last_tested)
-
-  if src_path:
-    bad_llvm_hash = get_llvm_hash.GetGitHashFrom(src_path, end)
-  else:
-    bad_llvm_hash = get_llvm_hash.LLVMHash().GetLLVMHash(end)
-
-  print(
-      'The bad revision is %d and its commit hash is %s' % (end, bad_llvm_hash))
 
 
 def LoadStatusFile(last_tested, start, end):
@@ -383,77 +281,95 @@ def LoadStatusFile(last_tested, start, end):
 
 
 def main(args_output):
-  """Bisects LLVM based off of a .JSON file.
+  """Bisects LLVM commits.
 
   Raises:
     AssertionError: The script was run inside the chroot.
   """
 
   chroot.VerifyOutsideChroot()
-
-  update_packages = [
-      'sys-devel/llvm', 'sys-libs/compiler-rt', 'sys-libs/libcxx',
-      'sys-libs/libcxxabi', 'sys-libs/llvm-libunwind'
-  ]
-
   patch_metadata_file = 'PATCHES.json'
-
   start = args_output.start_rev
   end = args_output.end_rev
 
-  bisect_contents = LoadStatusFile(args_output.last_tested, start, end)
+  bisect_state = LoadStatusFile(args_output.last_tested, start, end)
+  if start != bisect_state['start'] or end != bisect_state['end']:
+    raise ValueError(
+        f'The start {start} or the end {end} version provided is '
+        f'different than "start" {bisect_state["start"]} or "end" '
+        f'{bisect_state["end"]} in the .JSON file')
 
-  _ValidateStartAndEndAgainstJSONStartAndEnd(
-      start, end, bisect_contents['start'], bisect_contents['end'])
+  # Pending and skipped revisions are between 'start_rev' and 'end_rev'.
+  start_rev, end_rev, pending_revs, skip_revs = GetRemainingRange(
+      start, end, bisect_state['jobs'])
 
-  # Pending and skipped revisions are between 'start_revision' and
-  # 'end_revision'.
-  start_revision, end_revision, pending_revisions, skip_revisions = \
-      GetStartAndEndRevision(start, end, bisect_contents['jobs'])
+  revisions, git_hashes = GetCommitsBetween(start_rev, end_rev,
+                                            args_output.parallel,
+                                            args_output.src_path, pending_revs,
+                                            skip_revs)
 
-  revisions, git_hashes = GetRevisionsListAndHashList(
-      start_revision, end_revision, args_output.parallel, args_output.src_path,
-      pending_revisions, skip_revisions)
-
-  # No more revisions between 'start_revision' and 'end_revision', so
+  # No more revisions between 'start_rev' and 'end_rev', so
   # bisection is complete.
   #
-  # This is determined by finding all valid revisions between 'start_revision'
-  # and 'end_revision' and that are NOT in the 'pending' and 'skipped' set.
+  # This is determined by finding all valid revisions between 'start_rev'
+  # and 'end_rev' and that are NOT in the 'pending' and 'skipped' set.
   if not revisions:
-    # Successfully completed bisection where there are 2 cases:
-    # 1) 'start_revision' and 'end_revision' are back-to-back (example:
-    # 'start_revision' is 369410 and 'end_revision' is 369411).
-    #
-    # 2) 'start_revision' and 'end_revision' are NOT back-to-back, so there must
-    # be tryjobs in between which are labeled as 'skip' for their 'status'
-    # value.
-    #
-    # In either case, there are no 'pending' jobs.
-    if not pending_revisions:
-      _NoteCompletedBisection(args_output.last_tested, args_output.src_path,
-                              end_revision)
+    if pending_revs:
+      # Some tryjobs are not finished which may change the actual bad
+      # commit/revision when those tryjobs are finished.
+      no_revisions_message = (f'No revisions between start {start_rev} '
+                              f'and end {end_rev} to create tryjobs\n')
 
-      if skip_revisions:
-        skip_revisions_message = ('\nThe following revisions were skipped:\n' +
-                                  '\n'.join(str(rev) for rev in skip_revisions))
+      if pending_revs:
+        no_revisions_message += ('The following tryjobs are pending:\n' +
+                                 '\n'.join(str(rev)
+                                           for rev in pending_revs) + '\n')
 
-        print(skip_revisions_message)
+      if skip_revs:
+        no_revisions_message += ('The following tryjobs were skipped:\n' +
+                                 '\n'.join(str(rev)
+                                           for rev in skip_revs) + '\n')
 
-      return BisectionExitStatus.BISECTION_COMPLETE.value
+      raise ValueError(no_revisions_message)
 
-    # Some tryjobs are not finished which may change the actual bad
-    # commit/revision when those tryjobs are finished.
-    DieWithNoRevisionsError(start_revision, end_revision, skip_revisions,
-                            pending_revisions)
+    print(f'Finished bisecting for {args_output.last_tested}')
+    if args_output.src_path:
+      bad_llvm_hash = get_llvm_hash.GetGitHashFrom(args_output.src_path,
+                                                   end_rev)
+    else:
+      bad_llvm_hash = get_llvm_hash.LLVMHash().GetLLVMHash(end_rev)
+    print(f'The bad revision is {end_rev} and its commit hash is '
+          f'{bad_llvm_hash}')
+    if skip_revs:
+      skip_revs_message = ('\nThe following revisions were skipped:\n' +
+                           '\n'.join(str(rev) for rev in skip_revs))
+      print(skip_revs_message)
 
-  CheckForExistingTryjobsInRevisionsToLaunch(revisions, bisect_contents['jobs'])
+    if args_output.cleanup:
+      # Abandon all the CLs created for bisection
+      gerrit = os.path.join(args_output.chroot_path, 'chromite/bin/gerrit')
+      for build in bisect_state['jobs']:
+        try:
+          subprocess.check_output(
+              [gerrit, 'abandon', str(build['cl'])],
+              stderr=subprocess.STDOUT,
+              encoding='utf-8')
+        except subprocess.CalledProcessError as err:
+          # the CL may have been abandoned
+          if 'chromite.lib.gob_util.GOBError' not in err.output:
+            raise
 
-  UpdateBisection(revisions, git_hashes, bisect_contents,
-                  args_output.last_tested, update_packages,
-                  args_output.chroot_path, patch_metadata_file,
-                  args_output.extra_change_lists, args_output.options,
-                  args_output.builder, args_output.verbose)
+    return BisectionExitStatus.BISECTION_COMPLETE.value
+
+  for rev in revisions:
+    if update_tryjob_status.FindTryjobIndex(rev,
+                                            bisect_state['jobs']) is not None:
+      raise ValueError(f'Revision {rev} exists already in "jobs"')
+
+  Bisect(revisions, git_hashes, bisect_state, args_output.last_tested,
+         update_chromeos_llvm_hash.DEFAULT_PACKAGES, args_output.chroot_path,
+         patch_metadata_file, args_output.extra_change_lists,
+         args_output.options, args_output.builder, args_output.verbose)
 
 
 if __name__ == '__main__':

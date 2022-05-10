@@ -7,6 +7,7 @@ package main
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -52,7 +53,7 @@ func calcBisectCommand(env env, cfg *config, bisectStage string, compilerCmd *co
 		}
 	}
 	absCompilerPath := getAbsCmdPath(env, compilerCmd)
-	pythonPath, err := filepath.Abs(os.Args[0])
+	pythonPath, err := exec.LookPath(os.Args[0])
 	if err != nil {
 		return nil, err
 	}

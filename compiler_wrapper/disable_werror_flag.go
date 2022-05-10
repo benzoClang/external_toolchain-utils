@@ -7,18 +7,25 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
+	"strconv"
 	"strings"
-	"syscall"
 )
 
 const numWErrorEstimate = 30
 
-func shouldForceDisableWerror(env env, cfg *config) bool {
+func shouldForceDisableWerror(env env, cfg *config, ty compilerType) bool {
 	if cfg.isAndroidWrapper {
 		return cfg.useLlvmNext
+	}
+
+	// We only want this functionality for clang.
+	if ty != clangType {
+		return false
 	}
 	value, _ := env.getenv("FORCE_DISABLE_WERROR")
 	return value != ""
@@ -67,8 +74,12 @@ func doubleBuildWithWNoError(env env, cfg *config, originalCmd *command) (exitCo
 		return 0, wrapErrorwithSourceLocf(err, "prebuffering stdin: %v", err)
 	}
 
-	originalExitCode, err := wrapSubprocessErrorWithSourceLoc(originalCmd,
-		env.run(originalCmd, getStdin(), originalStdoutBuffer, originalStderrBuffer))
+	var originalExitCode int
+	commitOriginalRusage, err := maybeCaptureRusage(env, originalCmd, func(willLogRusage bool) error {
+		originalExitCode, err = wrapSubprocessErrorWithSourceLoc(originalCmd,
+			env.run(originalCmd, getStdin(), originalStdoutBuffer, originalStderrBuffer))
+		return err
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -82,6 +93,9 @@ func doubleBuildWithWNoError(env env, cfg *config, originalCmd *command) (exitCo
 			bytes.Contains(originalStdoutBufferBytes, []byte("warnings-as-errors")) ||
 			bytes.Contains(originalStdoutBufferBytes, []byte("clang-diagnostic-")))
 	if !shouldRetry {
+		if err := commitOriginalRusage(originalExitCode); err != nil {
+			return 0, fmt.Errorf("commiting rusage: %v", err)
+		}
 		originalStdoutBuffer.WriteTo(env.stdout())
 		originalStderrBuffer.WriteTo(env.stderr())
 		return originalExitCode, nil
@@ -94,17 +108,30 @@ func doubleBuildWithWNoError(env env, cfg *config, originalCmd *command) (exitCo
 		Args:       disableWerrorFlags(originalCmd.Args),
 		EnvUpdates: originalCmd.EnvUpdates,
 	}
-	retryExitCode, err := wrapSubprocessErrorWithSourceLoc(retryCommand,
-		env.run(retryCommand, getStdin(), retryStdoutBuffer, retryStderrBuffer))
+
+	var retryExitCode int
+	commitRetryRusage, err := maybeCaptureRusage(env, retryCommand, func(willLogRusage bool) error {
+		retryExitCode, err = wrapSubprocessErrorWithSourceLoc(retryCommand,
+			env.run(retryCommand, getStdin(), retryStdoutBuffer, retryStderrBuffer))
+		return err
+	})
 	if err != nil {
 		return 0, err
 	}
+
 	// If -Wno-error fixed us, pretend that we never ran without -Wno-error. Otherwise, pretend
 	// that we never ran the second invocation.
 	if retryExitCode != 0 {
 		originalStdoutBuffer.WriteTo(env.stdout())
 		originalStderrBuffer.WriteTo(env.stderr())
+		if err := commitOriginalRusage(originalExitCode); err != nil {
+			return 0, fmt.Errorf("commiting rusage: %v", err)
+		}
 		return originalExitCode, nil
+	}
+
+	if err := commitRetryRusage(retryExitCode); err != nil {
+		return 0, fmt.Errorf("commiting rusage: %v", err)
 	}
 
 	retryStdoutBuffer.WriteTo(env.stdout())
@@ -119,10 +146,14 @@ func doubleBuildWithWNoError(env env, cfg *config, originalCmd *command) (exitCo
 	}
 	outputToLog := strings.Join(lines, "\n")
 
+	// Ignore the error here; we can't do anything about it. The result is always valid (though
+	// perhaps incomplete) even if this returns an error.
+	parentProcesses, _ := collectAllParentProcesses()
 	jsonData := warningsJSONData{
-		Cwd:     env.getwd(),
-		Command: append([]string{originalCmd.Path}, originalCmd.Args...),
-		Stdout:  outputToLog,
+		Cwd:             env.getwd(),
+		Command:         append([]string{originalCmd.Path}, originalCmd.Args...),
+		Stdout:          outputToLog,
+		ParentProcesses: parentProcesses,
 	}
 
 	// Write warning report to stdout for Android.  On Android,
@@ -144,8 +175,8 @@ func doubleBuildWithWNoError(env env, cfg *config, originalCmd *command) (exitCo
 
 	// Buildbots use a nonzero umask, which isn't quite what we want: these directories should
 	// be world-readable and world-writable.
-	oldMask := syscall.Umask(0)
-	defer syscall.Umask(oldMask)
+	oldMask := env.umask(0)
+	defer env.umask(oldMask)
 
 	// Allow root and regular users to write to this without issue.
 	if err := os.MkdirAll(cfg.newWarningsDir, 0777); err != nil {
@@ -186,10 +217,87 @@ func doubleBuildWithWNoError(env env, cfg *config, originalCmd *command) (exitCo
 	return retryExitCode, nil
 }
 
-// Struct used to write JSON. Fileds have to be uppercase for the json
-// encoder to read them.
+func parseParentPidFromPidStat(pidStatContents string) (parentPid int, ok bool) {
+	// The parent's pid is the fourth field of /proc/[pid]/stat. Sadly, the second field can
+	// have spaces in it. It ends at the last ')' in the contents of /proc/[pid]/stat.
+	lastParen := strings.LastIndex(pidStatContents, ")")
+	if lastParen == -1 {
+		return 0, false
+	}
+
+	thirdFieldAndBeyond := strings.TrimSpace(pidStatContents[lastParen+1:])
+	fields := strings.Fields(thirdFieldAndBeyond)
+	if len(fields) < 2 {
+		return 0, false
+	}
+
+	fourthField := fields[1]
+	parentPid, err := strconv.Atoi(fourthField)
+	if err != nil {
+		return 0, false
+	}
+	return parentPid, true
+}
+
+func collectProcessData(pid int) (args, env []string, parentPid int, err error) {
+	procDir := fmt.Sprintf("/proc/%d", pid)
+
+	readFile := func(fileName string) (string, error) {
+		s, err := ioutil.ReadFile(path.Join(procDir, fileName))
+		if err != nil {
+			return "", fmt.Errorf("reading %s: %v", fileName, err)
+		}
+		return string(s), nil
+	}
+
+	statStr, err := readFile("stat")
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	parentPid, ok := parseParentPidFromPidStat(statStr)
+	if !ok {
+		return nil, nil, 0, fmt.Errorf("no parseable parent PID found in %q", statStr)
+	}
+
+	argsStr, err := readFile("cmdline")
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	args = strings.Split(argsStr, "\x00")
+
+	envStr, err := readFile("environ")
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	env = strings.Split(envStr, "\x00")
+	return args, env, parentPid, nil
+}
+
+// The returned []processData is valid even if this returns an error. The error is just the first we
+// encountered when trying to collect parent process data.
+func collectAllParentProcesses() ([]processData, error) {
+	results := []processData{}
+	for parent := os.Getppid(); parent != 1; {
+		args, env, p, err := collectProcessData(parent)
+		if err != nil {
+			return results, fmt.Errorf("inspecting parent %d: %v", parent, err)
+		}
+		results = append(results, processData{Args: args, Env: env})
+		parent = p
+	}
+	return results, nil
+}
+
+type processData struct {
+	Args []string `json:"invocation"`
+	Env  []string `json:"env"`
+}
+
+// Struct used to write JSON. Fields have to be uppercase for the json encoder to read them.
 type warningsJSONData struct {
-	Cwd     string   `json:"cwd"`
-	Command []string `json:"command"`
-	Stdout  string   `json:"stdout"`
+	Cwd             string        `json:"cwd"`
+	Command         []string      `json:"command"`
+	Stdout          string        `json:"stdout"`
+	ParentProcesses []processData `json:"parent_process_data"`
 }

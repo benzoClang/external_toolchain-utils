@@ -12,25 +12,64 @@ package, including the build script, and then
 build from there without a dependency on toolchain-utils
 itself.
 
-## Update Chrome OS
+## Testing Inside the Chroot
 
-Copy over sources and `build.py` to Chrome OS:
+To test updates to the wrapper locally:
+
+Run `install_compiler_wrapper.sh` to install the new wrapper in the chroot:
+```
+(chroot) ~/trunk/src/third_party/toolchain-utils/compiler_wrapper/install_compiler_wrapper.sh
+```
+
+Then perform the tests, e.g. build with the new compiler.
+
+
+## Updating the Wrapper for Chrome OS
+
+To update the wrapper for everyone, the new wrapper configuration must be copied
+into chromiumos-overlay, and new revisions of the gcc and llvm ebuilds must be
+created.
+
+Copy over sources and `build.py` to chromiumos-overlay:
 ```
 (chroot) /mnt/host/source/src/third_party/chromiumos-overlay/sys-devel/llvm/files/update_compiler_wrapper.sh
 ```
 
+Rename chromiumos-overlay/sys-devel/llvm/llvm-${VERSION}.ebuild to the next
+revision number. For example, if the current version is
+11.0_pre394483_p20200618-r2:
+```
+(chroot) cd ~/trunk/src/third_party/chromiumos-overlay
+(chroot) git mv llvm-11.0_pre394483_p20200618-r2.ebuild llvm-11.0_pre394483_p20200618-r3.ebuild
+```
+
+Rename chromiumos-overlay/sys-devel/gcc/gcc-${VERSION}.ebuild to the next
+revision number.  For example, if the current version is 10.2.0-r3:
+```
+(chroot) cd ~/trunk/src/third_party/chromiumos-overlay
+(chroot) git mv sys-devel/gcc/gcc-10.2.0-r3.ebuild sys-devel/gcc/gcc-10.2.0-r4.ebuild
+```
+
+Commit those changes together with the changes made by
+`update_compiler_wrapper.sh`.
+
+The changes can then be reviewed and submitted through the normal process.
+
+
+## Paths
+
 `build.py` is called by these ebuilds:
 
-- third_party/chromiumos-overlay/sys-devel/llvm/llvm-9.0_pre361749_p20190714.ebuild
+- third_party/chromiumos-overlay/sys-devel/llvm/llvm-*.ebuild
 - third_party/chromiumos-overlay/sys-devel/gcc/gcc-*.ebuild
 
 Generated wrappers are stored here:
 
 - Sysroot wrapper with ccache:
-  `/usr/x86_64-pc-linux-gnu/<arch>/gcc-bin/4.9.x/sysroot_wrapper.hardened.ccache`
+  `/usr/x86_64-pc-linux-gnu/<arch>/gcc-bin/10.2.0/sysroot_wrapper.hardened.ccache`
 - Sysroot wrapper without ccache:
-  `/usr/x86_64-pc-linux-gnu/<arch>/gcc-bin/4.9.x/sysroot_wrapper.hardened.noccache`
+  `/usr/x86_64-pc-linux-gnu/<arch>/gcc-bin/10.2.0/sysroot_wrapper.hardened.noccache`
 - Clang host wrapper:
   `/usr/bin/clang_host_wrapper`
 - Gcc host wrapper:
-  `/usr/x86_64-pc-linux-gnu/gcc-bin/4.9.x/host_wrapper`
+  `/usr/x86_64-pc-linux-gnu/gcc-bin/10.2.0/host_wrapper`

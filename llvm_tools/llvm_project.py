@@ -13,6 +13,7 @@ import subprocess
 import sys
 
 import get_llvm_hash
+import git_llvm_rev
 
 
 def get_location() -> str:
@@ -33,9 +34,13 @@ def ensure_up_to_date():
     assert checkout == actual_checkout, '%s != %s' % (actual_checkout, checkout)
 
   commit_timestamp = subprocess.check_output(
-      ['git', 'log', '-n1', '--format=%ct', 'origin/master'],
+      [
+          'git', 'log', '-n1', '--format=%ct',
+          'origin/' + git_llvm_rev.MAIN_BRANCH
+      ],
       cwd=checkout,
-      encoding='utf-8')
+      encoding='utf-8',
+  )
 
   commit_time = datetime.datetime.fromtimestamp(int(commit_timestamp.strip()))
   now = datetime.datetime.now()
@@ -52,7 +57,7 @@ def ensure_up_to_date():
       (time_since_last_commit.days, checkout),
       file=sys.stderr)
 
-  result = subprocess.run(['git', 'fetch', 'origin'], cwd=checkout)
+  result = subprocess.run(['git', 'fetch', 'origin'], check=False, cwd=checkout)
   if result.returncode:
     print(
         'Sync failed somehow; hoping that things are fresh enough, then...',

@@ -9,15 +9,18 @@
 from __future__ import print_function
 
 import argparse
+import contextlib
+import functools
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
-from contextlib import contextmanager
 
 import git_llvm_rev
-from subprocess_helpers import CheckCommand, check_output
+from subprocess_helpers import check_output
+from subprocess_helpers import CheckCommand
 
 _LLVM_GIT_URL = ('https://chromium.googlesource.com/external/github.com/llvm'
                  '/llvm-project')
@@ -39,7 +42,7 @@ def GetVersionFrom(src_dir, git_hash):
   version = git_llvm_rev.translate_sha_to_rev(
       git_llvm_rev.LLVMConfig(remote='origin', dir=src_dir), git_hash)
   # Note: branches aren't supported
-  assert version.branch == 'master', version.branch
+  assert version.branch == git_llvm_rev.MAIN_BRANCH, version.branch
   return version.number
 
 
@@ -59,10 +62,69 @@ def GetGitHashFrom(src_dir, version):
 
   return git_llvm_rev.translate_rev_to_sha(
       git_llvm_rev.LLVMConfig(remote='origin', dir=src_dir),
-      git_llvm_rev.Rev(branch='master', number=version))
+      git_llvm_rev.Rev(branch=git_llvm_rev.MAIN_BRANCH, number=version))
 
 
-@contextmanager
+def CheckoutBranch(src_dir, branch):
+  """Checks out and pulls from a branch in a git repo.
+
+  Args:
+    src_dir: The LLVM source tree.
+    branch: The git branch to checkout in src_dir.
+
+  Raises:
+    ValueError: Failed to checkout or pull branch version
+  """
+  CheckCommand(['git', '-C', src_dir, 'checkout', branch])
+  CheckCommand(['git', '-C', src_dir, 'pull'])
+
+
+def ParseLLVMMajorVersion(cmakelist):
+  """Reads CMakeList.txt file contents for LLVMMajor Version.
+
+  Args:
+    cmakelist: contents of CMakeList.txt
+
+  Returns:
+    The major version number as a string
+
+  Raises:
+    ValueError: The major version cannot be parsed from cmakelist
+  """
+  match = re.search(r'\n\s+set\(LLVM_VERSION_MAJOR (?P<major>\d+)\)', cmakelist)
+  if not match:
+    raise ValueError('Failed to parse CMakeList for llvm major version')
+  return match.group('major')
+
+
+@functools.lru_cache(maxsize=1)
+def GetLLVMMajorVersion(git_hash=None):
+  """Reads llvm/CMakeList.txt file contents for LLVMMajor Version.
+
+  Args:
+    git_hash: git hash of llvm version as string or None for top of trunk
+
+  Returns:
+    The major version number as a string
+
+  Raises:
+    ValueError: The major version cannot be parsed from cmakelist or
+      there was a failure to checkout git_hash version
+    FileExistsError: The src directory doe not contain CMakeList.txt
+  """
+  src_dir = GetAndUpdateLLVMProjectInLLVMTools()
+  cmakelists_path = os.path.join(src_dir, 'llvm', 'CMakeLists.txt')
+  if git_hash:
+    CheckCommand(['git', '-C', src_dir, 'checkout', git_hash])
+  try:
+    with open(cmakelists_path) as cmakelists_file:
+      return ParseLLVMMajorVersion(cmakelists_file.read())
+  finally:
+    if git_hash:
+      CheckoutBranch(src_dir, git_llvm_rev.MAIN_BRANCH)
+
+
+@contextlib.contextmanager
 def CreateTempLLVMRepo(temp_dir):
   """Adds a LLVM worktree to 'temp_dir'.
 
@@ -76,7 +138,7 @@ def CreateTempLLVMRepo(temp_dir):
     temp_dir: An absolute path to the temporary directory to put the worktree in
     (obtained via 'tempfile.mkdtemp()').
 
-  Returns:
+  Yields:
     The absolute path to 'temp_dir'.
 
   Raises:
@@ -85,13 +147,11 @@ def CreateTempLLVMRepo(temp_dir):
   """
 
   abs_path_to_llvm_project_dir = GetAndUpdateLLVMProjectInLLVMTools()
-
-  add_worktree_cmd = [
+  CheckCommand([
       'git', '-C', abs_path_to_llvm_project_dir, 'worktree', 'add', '--detach',
-      temp_dir, 'master'
-  ]
-
-  CheckCommand(add_worktree_cmd)
+      temp_dir,
+      'origin/%s' % git_llvm_rev.MAIN_BRANCH
+  ])
 
   try:
     yield temp_dir
@@ -115,9 +175,12 @@ def GetAndUpdateLLVMProjectInLLVMTools():
   LLVM mirror. In either case, this function will return the absolute path to
   'llvm-project-copy' directory.
 
+  Returns:
+    Absolute path to 'llvm-project-copy' directory in 'llvm_tools'
+
   Raises:
     ValueError: LLVM repo (in 'llvm-project-copy' dir.) has changes or failed to
-    checkout to master or failed to fetch from chromium mirror of LLVM.
+    checkout to main or failed to fetch from chromium mirror of LLVM.
   """
 
   abs_path_to_llvm_tools_dir = os.path.dirname(os.path.abspath(__file__))
@@ -127,7 +190,9 @@ def GetAndUpdateLLVMProjectInLLVMTools():
 
   if not os.path.isdir(abs_path_to_llvm_project_dir):
     print(
-        'Checking out LLVM from scratch. This could take a while...',
+        (f'Checking out LLVM to {abs_path_to_llvm_project_dir}\n'
+         'so that we can map between commit hashes and revision numbers.\n'
+         'This may take a while, but only has to be done once.'),
         file=sys.stderr)
     os.mkdir(abs_path_to_llvm_project_dir)
 
@@ -143,21 +208,16 @@ def GetAndUpdateLLVMProjectInLLVMTools():
       raise ValueError('LLVM repo in %s has changes, please remove.' %
                        abs_path_to_llvm_project_dir)
 
-    checkout_to_master_cmd = [
-        'git', '-C', abs_path_to_llvm_project_dir, 'checkout', 'master'
-    ]
-
-    CheckCommand(checkout_to_master_cmd)
-
-    update_master_cmd = ['git', '-C', abs_path_to_llvm_project_dir, 'pull']
-
-    CheckCommand(update_master_cmd)
+    CheckoutBranch(abs_path_to_llvm_project_dir, git_llvm_rev.MAIN_BRANCH)
 
   return abs_path_to_llvm_project_dir
 
 
 def GetGoogle3LLVMVersion(stable):
   """Gets the latest google3 LLVM version.
+
+  Args:
+    stable: boolean, use the stable version or the unstable version
 
   Returns:
     The latest LLVM SVN version as an integer.
@@ -183,13 +243,17 @@ def GetGoogle3LLVMVersion(stable):
   return GetVersionFrom(GetAndUpdateLLVMProjectInLLVMTools(), git_hash.rstrip())
 
 
-def is_svn_option(svn_option):
+def IsSvnOption(svn_option):
   """Validates whether the argument (string) is a git hash option.
 
   The argument is used to find the git hash of LLVM.
 
   Args:
     svn_option: The option passed in as a command line argument.
+
+  Returns:
+    lowercase svn_option if it is a known hash source, otherwise the svn_option
+    as an int
 
   Raises:
     ValueError: Invalid svn option provided.
@@ -217,7 +281,7 @@ def GetLLVMHashAndVersionFromSVNOption(svn_option):
 
   Args:
     svn_option: A valid svn option obtained from the command line.
-      Ex: 'google3', 'tot', or <svn_version> such as 365123.
+      Ex. 'google3', 'tot', or <svn_version> such as 365123.
 
   Returns:
     A tuple that is the LLVM git hash and LLVM version.
@@ -245,7 +309,7 @@ class LLVMHash(object):
   """Provides methods to retrieve a LLVM hash."""
 
   @staticmethod
-  @contextmanager
+  @contextlib.contextmanager
   def CreateTempDirectory():
     temp_dir = tempfile.mkdtemp()
 
@@ -298,14 +362,9 @@ class LLVMHash(object):
   def GetTopOfTrunkGitHash(self):
     """Gets the latest git hash from top of trunk of LLVM."""
 
-    path_to_master_branch = 'refs/heads/master'
-
-    llvm_tot_git_hash_cmd = [
-        'git', 'ls-remote', _LLVM_GIT_URL, path_to_master_branch
-    ]
-
-    llvm_tot_git_hash = check_output(llvm_tot_git_hash_cmd)
-
+    path_to_main_branch = 'refs/heads/main'
+    llvm_tot_git_hash = check_output(
+        ['git', 'ls-remote', _LLVM_GIT_URL, path_to_main_branch])
     return llvm_tot_git_hash.rstrip().split()[0]
 
 
@@ -320,7 +379,7 @@ def main():
   parser = argparse.ArgumentParser(description='Finds the LLVM hash.')
   parser.add_argument(
       '--llvm_version',
-      type=is_svn_option,
+      type=IsSvnOption,
       required=True,
       help='which git hash of LLVM to find. Either a svn revision, or one '
       'of %s' % sorted(KNOWN_HASH_SOURCES))

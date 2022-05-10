@@ -21,18 +21,6 @@ from cros_utils import command_executer
 class TrybotTest(unittest.TestCase):
   """Test for CommandExecuter class."""
 
-  old_tryjob_out = (
-      'Verifying patches...\n'
-      'Submitting tryjob...\n'
-      'Successfully sent PUT request to [buildbucket_bucket:master.chromiumos.t'
-      'ryserver] with [config:success-build] [buildbucket_id:895272114382368817'
-      '6].\n'
-      'Tryjob submitted!\n'
-      'To view your tryjobs, visit:\n'
-      '  http://cros-goldeneye/chromeos/healthmonitoring/buildDetails?buildbuck'
-      'etId=8952721143823688176\n'
-      '  https://uberchromegw.corp.google.com/i/chromiumos.tryserver/waterfall?'
-      'committer=laszio@chromium.org&builder=etc\n')
   tryjob_out = (
       '[{"buildbucket_id": "8952721143823688176", "build_config": '
       '"cave-llvm-toolchain-tryjob", "url": '

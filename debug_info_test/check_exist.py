@@ -10,7 +10,7 @@ from __future__ import print_function
 import os
 import subprocess
 
-from whitelist import is_whitelisted
+from allowlist import is_allowlisted
 
 
 def check_debug_info(dso_path, readelf_content):
@@ -24,8 +24,8 @@ def check_debug_info(dso_path, readelf_content):
     True if debug info section exists, otherwise False.
   """
 
-  # Return True if it is whitelisted
-  if is_whitelisted('exist_debug_info', dso_path):
+  # Return True if it is allowlisted
+  if is_allowlisted('exist_debug_info', dso_path):
     return True
 
   for l in readelf_content:
@@ -46,8 +46,8 @@ def check_producer(dso_path, readelf_content):
     Notice: If no compile unit in DSO, also return True.
   """
 
-  # Return True if it is whitelisted
-  if is_whitelisted('exist_producer', dso_path):
+  # Return True if it is allowlisted
+  if is_allowlisted('exist_producer', dso_path):
     return True
 
   # Indicate if there is a producer under each cu
@@ -85,7 +85,7 @@ def check_exist_all(dso_path):
   """
 
   readelf = subprocess.Popen(
-      ['readelf', '--debug-dump=info', '--dwarf-depth=1', dso_path],
+      ['llvm-dwarfdump', '--recurse-depth=0', dso_path],
       stdout=subprocess.PIPE,
       stderr=open(os.devnull, 'w'),
       encoding='utf-8')
