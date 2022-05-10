@@ -130,6 +130,7 @@ var crosHardenedConfig = &config{
 	// crbug.com/1103065: -grecord-gcc-switches pollutes the Goma cache;
 	//   removed that flag for now.
 	// Temporarily disable Wdeprecated-declarations. b/193860318
+	// b/230345382: Temporarily disable Wimplicit-function-declaration.
 
 	clangFlags: []string{
 		"-Qunused-arguments",
@@ -146,6 +147,7 @@ var crosHardenedConfig = &config{
 		"-fexperimental-new-pass-manager",
 		"-Wno-compound-token-split-by-macro",
 		"-Wno-deprecated-declarations",
+		"-Wno-error=implicit-function-declaration",
 	},
 
 	// Temporarily disable Wdeprecated-copy. b/191479033
@@ -176,6 +178,7 @@ var crosNonHardenedConfig = &config{
 	// Temporarily add no-unknown-warning-option to deal with old clang versions.
 	// Temporarily disable Wsection since kernel gets a bunch of these. chromium:778867
 	// Temporarily disable Wdeprecated-declarations. b/193860318
+	// b/230345382: Temporarily disable Wimplicit-function-declaration.
 	clangFlags: []string{
 		"-Qunused-arguments",
 		"-fdebug-default-version=5",
@@ -188,6 +191,7 @@ var crosNonHardenedConfig = &config{
 		"-fexperimental-new-pass-manager",
 		"-Wno-compound-token-split-by-macro",
 		"-Wno-deprecated-declarations",
+		"-Wno-error=implicit-function-declaration",
 	},
 
 	// Temporarily disable Wdeprecated-copy. b/191479033
@@ -223,6 +227,7 @@ var crosHostConfig = &config{
 	// crbug.com/1103065: -grecord-gcc-switches pollutes the Goma cache;
 	//   removed that flag for now.
 	// Temporarily disable Wdeprecated-declarations. b/193860318
+	// b/230345382: Temporarily disable Wimplicit-function-declaration.
 	clangFlags: []string{
 		"-Qunused-arguments",
 		"-fno-addrsig",
@@ -237,6 +242,7 @@ var crosHostConfig = &config{
 		"-fexperimental-new-pass-manager",
 		"-Wno-compound-token-split-by-macro",
 		"-Wno-deprecated-declarations",
+		"-Wno-error=implicit-function-declaration",
 	},
 
 	// Temporarily disable Wdeprecated-copy. b/191479033

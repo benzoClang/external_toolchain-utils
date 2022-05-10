@@ -30,14 +30,14 @@
             "-fexperimental-new-pass-manager",
             "-Wno-compound-token-split-by-macro",
             "-Wno-deprecated-declarations",
+            "-Wno-error=implicit-function-declaration",
             "-fcrash-diagnostics-dir=/tmp/stable/clang_crash_diagnostics",
             "-fcommon",
             "main.cc",
             "-Wno-implicit-int-float-conversion",
             "-Wno-compound-token-split-by-space",
             "-Wno-string-concatenation",
-            "-Wno-deprecated-copy",
-            "-Wno-unused-but-set-variable"
+            "-Wno-deprecated-copy"
           ]
         }
       }
@@ -74,14 +74,14 @@
             "-fexperimental-new-pass-manager",
             "-Wno-compound-token-split-by-macro",
             "-Wno-deprecated-declarations",
+            "-Wno-error=implicit-function-declaration",
             "-fcrash-diagnostics-dir=/tmp/stable/clang_crash_diagnostics",
             "-fcommon",
             "main.cc",
             "-Wno-implicit-int-float-conversion",
             "-Wno-compound-token-split-by-space",
             "-Wno-string-concatenation",
-            "-Wno-deprecated-copy",
-            "-Wno-unused-but-set-variable"
+            "-Wno-deprecated-copy"
           ]
         },
         "stderr": "-Werror originalerror",
@@ -104,6 +104,7 @@
             "-fexperimental-new-pass-manager",
             "-Wno-compound-token-split-by-macro",
             "-Wno-deprecated-declarations",
+            "-Wno-error=implicit-function-declaration",
             "-fcrash-diagnostics-dir=/tmp/stable/clang_crash_diagnostics",
             "-fcommon",
             "main.cc",
@@ -111,7 +112,6 @@
             "-Wno-compound-token-split-by-space",
             "-Wno-string-concatenation",
             "-Wno-deprecated-copy",
-            "-Wno-unused-but-set-variable",
             "-Wno-error",
             "-Wno-error=poison-system-directories"
           ]
@@ -152,14 +152,14 @@
             "-fexperimental-new-pass-manager",
             "-Wno-compound-token-split-by-macro",
             "-Wno-deprecated-declarations",
+            "-Wno-error=implicit-function-declaration",
             "-fcrash-diagnostics-dir=/tmp/stable/clang_crash_diagnostics",
             "-fcommon",
             "main.cc",
             "-Wno-implicit-int-float-conversion",
             "-Wno-compound-token-split-by-space",
             "-Wno-string-concatenation",
-            "-Wno-deprecated-copy",
-            "-Wno-unused-but-set-variable"
+            "-Wno-deprecated-copy"
           ]
         },
         "stderr": "-Werror originalerror",
@@ -182,6 +182,7 @@
             "-fexperimental-new-pass-manager",
             "-Wno-compound-token-split-by-macro",
             "-Wno-deprecated-declarations",
+            "-Wno-error=implicit-function-declaration",
             "-fcrash-diagnostics-dir=/tmp/stable/clang_crash_diagnostics",
             "-fcommon",
             "main.cc",
@@ -189,7 +190,6 @@
             "-Wno-compound-token-split-by-space",
             "-Wno-string-concatenation",
             "-Wno-deprecated-copy",
-            "-Wno-unused-but-set-variable",
             "-Wno-error",
             "-Wno-error=poison-system-directories"
           ]
