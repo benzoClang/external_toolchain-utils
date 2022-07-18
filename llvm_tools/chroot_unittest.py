@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2020 The Chromium OS Authors. All rights reserved.
+# Copyright 2020 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -32,9 +32,8 @@ class HelperFunctionsTest(unittest.TestCase):
     chroot_path = '/test/chroot/path'
     package_list = ['new-test/package']
 
-    self.assertEqual(
-        chroot.GetChrootEbuildPaths(chroot_path, package_list),
-        [package_chroot_path])
+    self.assertEqual(chroot.GetChrootEbuildPaths(chroot_path, package_list),
+                     [package_chroot_path])
 
     mock_chroot_command.assert_called_once()
 
@@ -58,8 +57,9 @@ class HelperFunctionsTest(unittest.TestCase):
     expected_abs_path = '/path/to/chroot/src/package.ebuild'
 
     self.assertEqual(
-        chroot.ConvertChrootPathsToAbsolutePaths(
-            chroot_path, chroot_file_paths), [expected_abs_path])
+        chroot.ConvertChrootPathsToAbsolutePaths(chroot_path,
+                                                 chroot_file_paths),
+        [expected_abs_path])
 
 
 if __name__ == '__main__':

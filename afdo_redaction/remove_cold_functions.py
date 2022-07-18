@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2020 The Chromium OS Authors. All rights reserved.
+# Copyright 2020 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -14,7 +14,7 @@ same sample count, we need to remove all of them in order to meet the
 target, so the result profile will always have less than or equal to the
 given number of functions.
 
-The script is intended to be used on production Chrome OS profiles, after
+The script is intended to be used on production ChromeOS profiles, after
 other redaction/trimming scripts. It can be used with given textual CWP
 and benchmark profiles, in order to analyze how many removed functions are
 from which profile (or both), which can be used an indicator of fairness

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2020 The Chromium OS Authors. All rights reserved.
+# Copyright 2020 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 """Tool to automatically generate a new Rust uprev CL.
 
 This tool is intended to automatically generate a CL to uprev Rust to a
-newer version in Chrome OS, including creating a new Rust version or
+newer version in ChromeOS, including creating a new Rust version or
 removing an old version. It's based on
 src/third_party/chromiumos-overlay/dev-lang/rust/UPGRADE.md. When using
 the tool, the progress can be saved to a JSON file, so the user can resume

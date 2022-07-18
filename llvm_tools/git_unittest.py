@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2020 The Chromium OS Authors. All rights reserved.
+# Copyright 2020 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -32,9 +32,8 @@ class HelperFunctionsTest(unittest.TestCase):
     with self.assertRaises(ValueError) as err:
       git.CreateBranch(path_to_repo, branch)
 
-    self.assertEqual(
-        str(err.exception),
-        'Invalid directory path provided: %s' % path_to_repo)
+    self.assertEqual(str(err.exception),
+                     'Invalid directory path provided: %s' % path_to_repo)
 
     mock_isdir.assert_called_once()
 
@@ -59,9 +58,8 @@ class HelperFunctionsTest(unittest.TestCase):
     with self.assertRaises(ValueError) as err:
       git.DeleteBranch(path_to_repo, branch)
 
-    self.assertEqual(
-        str(err.exception),
-        'Invalid directory path provided: %s' % path_to_repo)
+    self.assertEqual(str(err.exception),
+                     'Invalid directory path provided: %s' % path_to_repo)
 
     mock_isdir.assert_called_once()
 
@@ -87,8 +85,8 @@ class HelperFunctionsTest(unittest.TestCase):
     with self.assertRaises(ValueError) as err:
       git.UploadChanges(path_to_repo, branch, commit_messages)
 
-    self.assertEqual(
-        str(err.exception), 'Invalid path provided: %s' % path_to_repo)
+    self.assertEqual(str(err.exception),
+                     'Invalid path provided: %s' % path_to_repo)
 
     mock_isdir.assert_called_once()
 
@@ -129,11 +127,10 @@ class HelperFunctionsTest(unittest.TestCase):
     ]
     self.assertEqual(
         mock_commands.call_args_list[1],
-        mock.call(
-            expected_cmd,
-            stderr=subprocess.STDOUT,
-            cwd=path_to_repo,
-            encoding='utf-8'))
+        mock.call(expected_cmd,
+                  stderr=subprocess.STDOUT,
+                  cwd=path_to_repo,
+                  encoding='utf-8'))
 
     self.assertEqual(
         change_list.url,

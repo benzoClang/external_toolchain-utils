@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2020 The Chromium OS Authors. All rights reserved.
+# Copyright 2020 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -24,7 +24,6 @@ class Test(unittest.TestCase):
   """Tests for nightly_revert_checker."""
 
   def test_email_rendering_works_for_singular_revert(self):
-
     def prettify_sha(sha: str) -> tiny_render.Piece:
       return 'pretty_' + sha
 
@@ -38,8 +37,8 @@ class Test(unittest.TestCase):
         prettify_sha=prettify_sha,
         get_sha_description=get_sha_description,
         new_reverts=[
-            revert_checker.Revert(
-                sha='${revert_sha}', reverted_sha='${reverted_sha}')
+            revert_checker.Revert(sha='${revert_sha}',
+                                  reverted_sha='${reverted_sha}')
         ])
 
     expected_email = nightly_revert_checker._Email(
@@ -65,7 +64,6 @@ class Test(unittest.TestCase):
     self.assertEqual(email, expected_email)
 
   def test_email_rendering_works_for_multiple_reverts(self):
-
     def prettify_sha(sha: str) -> tiny_render.Piece:
       return 'pretty_' + sha
 
@@ -79,13 +77,13 @@ class Test(unittest.TestCase):
         prettify_sha=prettify_sha,
         get_sha_description=get_sha_description,
         new_reverts=[
-            revert_checker.Revert(
-                sha='${revert_sha1}', reverted_sha='${reverted_sha1}'),
-            revert_checker.Revert(
-                sha='${revert_sha2}', reverted_sha='${reverted_sha2}'),
+            revert_checker.Revert(sha='${revert_sha1}',
+                                  reverted_sha='${reverted_sha1}'),
+            revert_checker.Revert(sha='${revert_sha2}',
+                                  reverted_sha='${reverted_sha2}'),
             # Keep this out-of-order to check that we sort based on SHAs
-            revert_checker.Revert(
-                sha='${revert_sha0}', reverted_sha='${reverted_sha0}'),
+            revert_checker.Revert(sha='${revert_sha0}',
+                                  reverted_sha='${reverted_sha0}'),
         ])
 
     expected_email = nightly_revert_checker._Email(
@@ -161,13 +159,13 @@ class Test(unittest.TestCase):
     find_reverts.return_value = [
         revert_checker.Revert('12345abcdef', 'fedcba54321')
     ]
-    nightly_revert_checker.do_cherrypick(
-        chroot_path='/path/to/chroot',
-        llvm_dir='/path/to/llvm',
-        interesting_shas=[('12345abcdef', 'fedcba54321')],
-        state={},
-        reviewers=['meow@chromium.org'],
-        cc=['purr@chromium.org'])
+    nightly_revert_checker.do_cherrypick(chroot_path='/path/to/chroot',
+                                         llvm_dir='/path/to/llvm',
+                                         interesting_shas=[('12345abcdef',
+                                                            'fedcba54321')],
+                                         state={},
+                                         reviewers=['meow@chromium.org'],
+                                         cc=['purr@chromium.org'])
 
     do_cherrypick.assert_called_once()
     find_reverts.assert_called_once()
@@ -181,13 +179,13 @@ class Test(unittest.TestCase):
     ]
     do_cherrypick.side_effect = get_upstream_patch.CherrypickError(
         'Patch at 12345abcdef already exists in PATCHES.json')
-    nightly_revert_checker.do_cherrypick(
-        chroot_path='/path/to/chroot',
-        llvm_dir='/path/to/llvm',
-        interesting_shas=[('12345abcdef', 'fedcba54321')],
-        state={},
-        reviewers=['meow@chromium.org'],
-        cc=['purr@chromium.org'])
+    nightly_revert_checker.do_cherrypick(chroot_path='/path/to/chroot',
+                                         llvm_dir='/path/to/llvm',
+                                         interesting_shas=[('12345abcdef',
+                                                            'fedcba54321')],
+                                         state={},
+                                         reviewers=['meow@chromium.org'],
+                                         cc=['purr@chromium.org'])
 
     do_cherrypick.assert_called_once()
     find_reverts.assert_called_once()

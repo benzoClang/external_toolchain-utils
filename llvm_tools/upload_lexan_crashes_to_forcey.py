@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2020 The Chromium OS Authors. All rights reserved.
+# Copyright 2020 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -50,7 +50,7 @@ def get_available_test_case_urls(year: int, month: int, day: int) -> List[str]:
 
 
 def test_cases_on_or_after(date: datetime.datetime
-                          ) -> Generator[str, None, None]:
+                           ) -> Generator[str, None, None]:
   """Yields all test-cases submitted on or after the given date."""
   for year in get_available_year_numbers():
     if year < date.year:
@@ -118,8 +118,7 @@ def submit_test_case(gs_url: str, cr_tool: str) -> None:
     # chromium.clang-ToTiOS-12754-GTXToolKit-2bfcde.tgz)
     # we'll get `.crash` files. Unclear why, but let's filter them out anyway.
     repro_files = [
-        os.path.join(tempdir, x)
-        for x in os.listdir(tempdir)
+        os.path.join(tempdir, x) for x in os.listdir(tempdir)
         if not x.endswith('.crash')
     ]
     assert len(repro_files) == 2, repro_files
@@ -133,8 +132,8 @@ def submit_test_case(gs_url: str, cr_tool: str) -> None:
     # Peephole: lexan got a crash upload with a way old clang. Ignore it.
     with open(sh_file, encoding='utf-8') as f:
       if 'Crash reproducer for clang version 9.0.0' in f.read():
-        logging.warning('Skipping upload for %s; seems to be with an old clang',
-                        gs_url)
+        logging.warning(
+            'Skipping upload for %s; seems to be with an old clang', gs_url)
         return
 
     subprocess.run(
@@ -226,14 +225,16 @@ def main(argv: List[str]):
   my_dir = os.path.dirname(os.path.abspath(__file__))
 
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument(
-      '--state_file', default=os.path.join(my_dir, 'lexan-state.json'))
+  parser.add_argument('--state_file',
+                      default=os.path.join(my_dir, 'lexan-state.json'))
   parser.add_argument(
       '--last_date',
       help='The earliest date that we care about. All test cases from here '
       'on will be picked up. Format is YYYY-MM-DD.')
-  parser.add_argument(
-      '--4c', dest='forcey', required=True, help='Path to a 4c client binary')
+  parser.add_argument('--4c',
+                      dest='forcey',
+                      required=True,
+                      help='Path to a 4c client binary')
   opts = parser.parse_args(argv)
 
   forcey = opts.forcey

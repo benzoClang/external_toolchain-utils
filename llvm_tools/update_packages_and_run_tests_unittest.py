@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Copyright 2019 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -46,7 +46,8 @@ class UpdatePackagesAndRunTryjobsTest(unittest.TestCase):
   def testMatchedLastTestedFile(self):
     with test_helpers.CreateTemporaryFile() as last_tested_file:
       arg_dict = {
-          'svn_version': 1234,
+          'svn_version':
+          1234,
           'ebuilds': [
               '/path/to/package1-r2.ebuild',
               '/path/to/package2/package2-r3.ebuild'
@@ -107,10 +108,9 @@ class UpdatePackagesAndRunTryjobsTest(unittest.TestCase):
                                                        options, builder),
         expected_cmd)
 
-  @mock.patch.object(
-      update_packages_and_run_tests,
-      'GetCurrentTimeInUTC',
-      return_value='2019-09-09')
+  @mock.patch.object(update_packages_and_run_tests,
+                     'GetCurrentTimeInUTC',
+                     return_value='2019-09-09')
   @mock.patch.object(update_packages_and_run_tests, 'AddLinksToCL')
   @mock.patch.object(subprocess, 'check_output')
   def testSuccessfullySubmittedTryJob(self, mock_cmd, mock_add_links_to_cl,
@@ -147,8 +147,9 @@ class UpdatePackagesAndRunTryjobsTest(unittest.TestCase):
 
     self.assertEqual(tests, expected_tests)
 
-    mock_cmd.assert_called_once_with(
-        expected_cmd, cwd=chroot_path, encoding='utf-8')
+    mock_cmd.assert_called_once_with(expected_cmd,
+                                     cwd=chroot_path,
+                                     encoding='utf-8')
 
     mock_add_links_to_cl.assert_called_once()
 
@@ -166,7 +167,10 @@ class UpdatePackagesAndRunTryjobsTest(unittest.TestCase):
     bb_id = '1234'
     create_time = '2020-04-18T00:03:53.978767Z'
 
-    mock_cmd.return_value = json.dumps({'id': bb_id, 'createTime': create_time})
+    mock_cmd.return_value = json.dumps({
+        'id': bb_id,
+        'createTime': create_time
+    })
 
     chroot_path = '/some/path/to/chroot'
     cl = 900
@@ -188,8 +192,9 @@ class UpdatePackagesAndRunTryjobsTest(unittest.TestCase):
 
     self.assertEqual(tests, expected_tests)
 
-    mock_cmd.assert_called_once_with(
-        expected_cmd, cwd=chroot_path, encoding='utf-8')
+    mock_cmd.assert_called_once_with(expected_cmd,
+                                     cwd=chroot_path,
+                                     encoding='utf-8')
 
     mock_add_links_to_cl.assert_called_once()
 
@@ -304,8 +309,8 @@ class UpdatePackagesAndRunTestCQTest(unittest.TestCase):
         update_packages_and_run_tests.GetCQDependString(test_no_changelists))
 
     self.assertEqual(
-        update_packages_and_run_tests.GetCQDependString(test_single_changelist),
-        '\nCq-Depend: chromium:1234')
+        update_packages_and_run_tests.GetCQDependString(
+            test_single_changelist), '\nCq-Depend: chromium:1234')
 
     self.assertEqual(
         update_packages_and_run_tests.GetCQDependString(
@@ -318,7 +323,8 @@ class UpdatePackagesAndRunTestCQTest(unittest.TestCase):
     test_invalid_trybot = 'invalid-name'
 
     self.assertIsNone(
-        update_packages_and_run_tests.GetCQIncludeTrybotsString(test_no_trybot))
+        update_packages_and_run_tests.GetCQIncludeTrybotsString(
+            test_no_trybot))
 
     self.assertEqual(
         update_packages_and_run_tests.GetCQIncludeTrybotsString(

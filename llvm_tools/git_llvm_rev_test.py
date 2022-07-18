@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Copyright 2019 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -14,8 +14,8 @@ from git_llvm_rev import MAIN_BRANCH
 
 
 def get_llvm_config() -> git_llvm_rev.LLVMConfig:
-  return git_llvm_rev.LLVMConfig(
-      dir=llvm_project.get_location(), remote='origin')
+  return git_llvm_rev.LLVMConfig(dir=llvm_project.get_location(),
+                                 remote='origin')
 
 
 class Test(unittest.TestCase):
@@ -30,8 +30,8 @@ class Test(unittest.TestCase):
 
   def test_sha_to_rev_on_base_sha_works(self) -> None:
     sha = self.rev_to_sha_with_round_trip(
-        git_llvm_rev.Rev(
-            branch=MAIN_BRANCH, number=git_llvm_rev.base_llvm_revision))
+        git_llvm_rev.Rev(branch=MAIN_BRANCH,
+                         number=git_llvm_rev.base_llvm_revision))
     self.assertEqual(sha, git_llvm_rev.base_llvm_sha)
 
   def test_sha_to_rev_prior_to_base_rev_works(self) -> None:

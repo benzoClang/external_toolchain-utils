@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Copyright 2019 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -12,6 +12,7 @@ import datetime
 import multiprocessing
 import multiprocessing.pool
 import os
+from pathlib import Path
 import re
 import shlex
 import shutil
@@ -111,10 +112,87 @@ def get_check_result_or_catch(
     )
 
 
-def check_yapf(toolchain_utils_root: str,
+def check_isort(toolchain_utils_root: str,
+                python_files: t.Iterable[str]) -> CheckResult:
+  """Subchecker of check_py_format. Checks python file formats with isort"""
+  chromite = Path('/mnt/host/source/chromite')
+  isort = chromite / 'scripts' / 'isort'
+  config_file = chromite / '.isort.cfg'
+
+  if not (isort.exists() and config_file.exists()):
+    return CheckResult(
+        ok=True,
+        output='isort not found; skipping',
+        autofix_commands=[],
+    )
+
+  config_file_flag = f'--settings-file={config_file}'
+  command = [isort, '-c', config_file_flag] + python_files
+  exit_code, stdout_and_stderr = run_command_unchecked(
+      command, cwd=toolchain_utils_root)
+
+  # isort fails when files have broken formatting.
+  if not exit_code:
+    return CheckResult(
+        ok=True,
+        output='',
+        autofix_commands=[],
+    )
+
+  bad_files = []
+  bad_file_re = re.compile(
+      r'^ERROR: (.*) Imports are incorrectly sorted and/or formatted\.$')
+  for line in stdout_and_stderr.splitlines():
+    m = bad_file_re.match(line)
+    if m:
+      file_name, = m.groups()
+      bad_files.append(file_name.strip())
+
+  if not bad_files:
+    return CheckResult(
+        ok=False,
+        output='`%s` failed; stdout/stderr:\n%s' %
+        (escape_command(command), stdout_and_stderr),
+        autofix_commands=[],
+    )
+
+  autofix = [str(isort), config_file_flag] + bad_files
+  return CheckResult(
+      ok=False,
+      output='The following file(s) have formatting errors: %s' % bad_files,
+      autofix_commands=[autofix],
+  )
+
+
+def check_yapf(toolchain_utils_root: str, yapf: Path,
                python_files: t.Iterable[str]) -> CheckResult:
   """Subchecker of check_py_format. Checks python file formats with yapf"""
-  command = ['yapf', '-d'] + python_files
+  # Folks have been bitten by accidentally using multiple yapf versions in the
+  # past. This is an issue, since newer versions of yapf sometimes format
+  # things differently. Make the version obvious.
+  command = [yapf, '--version']
+  exit_code, stdout_and_stderr = run_command_unchecked(
+      command, cwd=toolchain_utils_root)
+  if exit_code:
+    return CheckResult(
+        ok=False,
+        output=f'Failed getting yapf version; stdstreams: {stdout_and_stderr}',
+        autofix_commands=[],
+    )
+
+  yapf_version = stdout_and_stderr.strip()
+  # This is the depot_tools version. If folks have this, things will break for
+  # them. Ask them to upgrade. Peephole this rather than making some
+  # complicated version-parsing scheme, since it's likely that everyone with a
+  # too-old version is using specifically the depot_tools one.
+  if yapf_version == 'yapf 0.27.0':
+    return CheckResult(
+        ok=False,
+        output='YAPF is too old; please upgrade it: `pip install --user yapf`',
+        autofix_commands=[],
+    )
+
+  command = [yapf, '-d'] + python_files
   exit_code, stdout_and_stderr = run_command_unchecked(
       command, cwd=toolchain_utils_root)
 
@@ -122,7 +200,7 @@ def check_yapf(toolchain_utils_root: str,
   if exit_code == 0:
     return CheckResult(
         ok=True,
-        output='',
+        output=f'Using {yapf_version}, no issues were found.',
         autofix_commands=[],
     )
 
@@ -142,15 +220,16 @@ def check_yapf(toolchain_utils_root: str,
   if not bad_files:
     return CheckResult(
         ok=False,
-        output='`%s` failed; stdout/stderr:\n%s' % (escape_command(command),
-                                                    stdout_and_stderr),
+        output='`%s` failed; stdout/stderr:\n%s' %
+        (escape_command(command), stdout_and_stderr),
         autofix_commands=[],
     )
 
-  autofix = ['yapf', '-i'] + bad_files
+  autofix = [str(yapf), '-i'] + bad_files
   return CheckResult(
       ok=False,
-      output='The following file(s) have formatting errors: %s' % bad_files,
+      output=f'Using {yapf_version}, these file(s) have formatting errors: '
+      f'{bad_files}',
       autofix_commands=[autofix],
   )
 
@@ -175,13 +254,13 @@ def check_python_file_headers(python_files: t.Iterable[str]) -> CheckResult:
   autofix = []
   output = []
   if add_hashbang:
-    output.append(
-        'The following files have no #!, but need one: %s' % add_hashbang)
+    output.append('The following files have no #!, but need one: %s' %
+                  add_hashbang)
     autofix.append(['sed', '-i', '1i#!/usr/bin/env python3'] + add_hashbang)
 
   if remove_hashbang:
-    output.append(
-        "The following files have a #!, but shouldn't: %s" % remove_hashbang)
+    output.append("The following files have a #!, but shouldn't: %s" %
+                  remove_hashbang)
     autofix.append(['sed', '-i', '1d'] + remove_hashbang)
 
   if not output:
@@ -199,16 +278,20 @@ def check_python_file_headers(python_files: t.Iterable[str]) -> CheckResult:
 
 def check_py_format(toolchain_utils_root: str,
                     thread_pool: multiprocessing.pool.ThreadPool,
-                    files: t.Iterable[str]) -> CheckResult:
+                    files: t.Iterable[str]) -> t.List[CheckResult]:
   """Runs yapf on files to check for style bugs. Also checks for #!s."""
-  yapf = 'yapf'
-  if not has_executable_on_path(yapf):
-    return CheckResult(
-        ok=False,
-        output="yapf isn't available on your $PATH. Please either "
-        'enter a chroot, or place depot_tools on your $PATH.',
-        autofix_commands=[],
-    )
+  pip_yapf = Path('~/.local/bin/yapf').expanduser()
+  if pip_yapf.exists():
+    yapf = pip_yapf
+  else:
+    yapf = 'yapf'
+    if not has_executable_on_path(yapf):
+      return CheckResult(
+          ok=False,
+          output="yapf isn't available on your $PATH. Please either "
+          'enter a chroot, or place depot_tools on your $PATH.',
+          autofix_commands=[],
+      )
 
   python_files = [f for f in remove_deleted_files(files) if f.endswith('.py')]
   if not python_files:
@@ -221,9 +304,12 @@ def check_py_format(toolchain_utils_root: str,
   tasks = [
       ('check_yapf',
        thread_pool.apply_async(check_yapf,
+                               (toolchain_utils_root, yapf, python_files))),
+      ('check_isort',
+       thread_pool.apply_async(check_isort,
                                (toolchain_utils_root, python_files))),
       ('check_file_headers',
-       thread_pool.apply_async(check_python_file_headers, (python_files,))),
+       thread_pool.apply_async(check_python_file_headers, (python_files, ))),
   ]
   return [(name, get_check_result_or_catch(task)) for name, task in tasks]
 
@@ -243,12 +329,12 @@ def check_cros_lint(
   # lint` (if it's been made available to us), or we try a mix of
   # pylint+golint.
   def try_run_cros_lint(cros_binary: str) -> t.Optional[CheckResult]:
-    exit_code, output = run_command_unchecked(
-        [cros_binary, 'lint', '--'] + files,
-        toolchain_utils_root,
-        env=fixed_env)
+    exit_code, output = run_command_unchecked([cros_binary, 'lint', '--'] +
+                                              files,
+                                              toolchain_utils_root,
+                                              env=fixed_env)
 
-    # This is returned specifically if cros couldn't find the Chrome OS tree
+    # This is returned specifically if cros couldn't find the ChromeOS tree
     # root.
     if exit_code == 127:
       return None
@@ -272,8 +358,9 @@ def check_cros_lint(
   tasks = []
 
   def check_result_from_command(command: t.List[str]) -> CheckResult:
-    exit_code, output = run_command_unchecked(
-        command, toolchain_utils_root, env=fixed_env)
+    exit_code, output = run_command_unchecked(command,
+                                              toolchain_utils_root,
+                                              env=fixed_env)
     return CheckResult(
         ok=exit_code == 0,
         output=output,
@@ -310,9 +397,9 @@ def check_cros_lint(
     tasks.append(('golint', thread_pool.apply_async(run_golint)))
 
   complaint = '\n'.join((
-      'WARNING: No Chrome OS checkout detected, and no viable CrOS tree',
+      'WARNING: No ChromeOS checkout detected, and no viable CrOS tree',
       'found; falling back to linting only python and go. If you have a',
-      'Chrome OS checkout, please either develop from inside of the source',
+      'ChromeOS checkout, please either develop from inside of the source',
       'tree, or set $CHROMEOS_ROOT_DIRECTORY to the root of it.',
   ))
 
@@ -356,8 +443,8 @@ def check_go_format(toolchain_utils_root, _thread_pool, files):
   if exit_code:
     return CheckResult(
         ok=False,
-        output='%s failed; stdout/stderr:\n%s' % (escape_command(command),
-                                                  output),
+        output='%s failed; stdout/stderr:\n%s' %
+        (escape_command(command), output),
         autofix_commands=[],
     )
 
@@ -467,7 +554,8 @@ def try_autofix(all_autofix_commands: t.List[t.List[str]],
 
   anything_succeeded = False
   for command in all_autofix_commands:
-    exit_code, output = run_command_unchecked(command, cwd=toolchain_utils_root)
+    exit_code, output = run_command_unchecked(command,
+                                              cwd=toolchain_utils_root)
 
     if exit_code:
       print('*** Autofix command `%s` exited with code %d; stdout/stderr:' %
@@ -547,32 +635,28 @@ def maybe_reexec_inside_chroot(autofix: bool, files: t.List[str]) -> None:
   os.execvp(args[0], args)
 
 
-# FIXME(crbug.com/980719): we probably want a better way of handling this. For
-# now, as a workaround, ensure we have all dependencies installed as a part of
-# presubmits. pip and scipy are fast enough to install (they take <1min
-# combined on my machine), so hoooopefully users won't get too impatient.
-def ensure_scipy_installed() -> None:
+def ensure_pip_deps_installed() -> None:
   if not has_executable_on_path('pip'):
     print('Autoinstalling `pip`...')
     subprocess.check_call(['sudo', 'emerge', 'dev-python/pip'])
 
-  exit_code = subprocess.call(
-      ['python3', '-c', 'import scipy'],
-      stdout=subprocess.DEVNULL,
-      stderr=subprocess.DEVNULL,
-  )
-  if exit_code != 0:
-    print('Autoinstalling `scipy`...')
-    subprocess.check_call(['pip', 'install', '--user', 'scipy'])
+  for package in ('scipy', 'yapf'):
+    exit_code = subprocess.call(
+        ['python3', '-c', f'import {package}'],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if exit_code != 0:
+      print(f'Autoinstalling `{package}`...')
+      subprocess.check_call(['pip', 'install', '--user', package])
 
 
 def main(argv: t.List[str]) -> int:
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument(
-      '--no_autofix',
-      dest='autofix',
-      action='store_false',
-      help="Don't run any autofix commands.")
+  parser.add_argument('--no_autofix',
+                      dest='autofix',
+                      action='store_false',
+                      help="Don't run any autofix commands.")
   parser.add_argument(
       '--no_enter_chroot',
       dest='enter_chroot',
@@ -591,7 +675,7 @@ def main(argv: t.List[str]) -> int:
   # If you ask for --no_enter_chroot, you're on your own for installing these
   # things.
   if is_in_chroot():
-    ensure_scipy_installed()
+    ensure_pip_deps_installed()
 
   files = [os.path.abspath(f) for f in files]
 

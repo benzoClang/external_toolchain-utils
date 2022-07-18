@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright (c) 2013 The Chromium OS Authors. All rights reserved.
+# Copyright (c) 2013 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -79,6 +79,7 @@ EXPERIMENT_FILE_2 = """
 
 class ExperimentFactoryTest(unittest.TestCase):
   """Class for running experiment factory unittests."""
+
   def setUp(self):
     self.append_benchmark_call_args = []
 
@@ -402,8 +403,13 @@ class ExperimentFactoryTest(unittest.TestCase):
 
   def test_get_default_remotes(self):
     board_list = [
-        'bob', 'chell', 'coral', 'elm', 'kefka', 'nautilus', 'snappy',
-        'veyron_tiger'
+        'bob',
+        'chell',
+        'coral',
+        'elm',
+        'kefka',
+        'nautilus',
+        'snappy',
     ]
 
     ef = ExperimentFactory()

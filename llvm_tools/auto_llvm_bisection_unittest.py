@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Copyright 2019 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -27,10 +27,9 @@ class AutoLLVMBisectionTest(unittest.TestCase):
   """Unittests for auto bisection of LLVM."""
 
   @mock.patch.object(chroot, 'VerifyOutsideChroot', return_value=True)
-  @mock.patch.object(
-      llvm_bisection,
-      'GetCommandLineArgs',
-      return_value=test_helpers.ArgsOutputTest())
+  @mock.patch.object(llvm_bisection,
+                     'GetCommandLineArgs',
+                     return_value=test_helpers.ArgsOutputTest())
   @mock.patch.object(time, 'sleep')
   @mock.patch.object(traceback, 'print_exc')
   @mock.patch.object(llvm_bisection, 'main')
@@ -62,9 +61,9 @@ class AutoLLVMBisectionTest(unittest.TestCase):
     ]
     mock_json_load.return_value = {
         'start':
-            369410,
+        369410,
         'end':
-            369420,
+        369420,
         'jobs': [{
             'buildbucket_id': 12345,
             'rev': 369411,
@@ -93,10 +92,9 @@ class AutoLLVMBisectionTest(unittest.TestCase):
   @mock.patch.object(traceback, 'print_exc')
   @mock.patch.object(llvm_bisection, 'main')
   @mock.patch.object(os.path, 'isfile')
-  @mock.patch.object(
-      llvm_bisection,
-      'GetCommandLineArgs',
-      return_value=test_helpers.ArgsOutputTest())
+  @mock.patch.object(llvm_bisection,
+                     'GetCommandLineArgs',
+                     return_value=test_helpers.ArgsOutputTest())
   def testFailedToStartBisection(self, mock_get_args, mock_isfile,
                                  mock_llvm_bisection, mock_traceback,
                                  mock_sleep, mock_outside_chroot):
@@ -121,10 +119,9 @@ class AutoLLVMBisectionTest(unittest.TestCase):
     self.assertEqual(mock_sleep.call_count, 2)
 
   @mock.patch.object(chroot, 'VerifyOutsideChroot', return_value=True)
-  @mock.patch.object(
-      llvm_bisection,
-      'GetCommandLineArgs',
-      return_value=test_helpers.ArgsOutputTest())
+  @mock.patch.object(llvm_bisection,
+                     'GetCommandLineArgs',
+                     return_value=test_helpers.ArgsOutputTest())
   @mock.patch.object(time, 'time')
   @mock.patch.object(time, 'sleep')
   @mock.patch.object(os.path, 'isfile')
@@ -154,9 +151,9 @@ class AutoLLVMBisectionTest(unittest.TestCase):
     mock_isfile.return_value = True
     mock_json_load.return_value = {
         'start':
-            369410,
+        369410,
         'end':
-            369420,
+        369420,
         'jobs': [{
             'buildbucket_id': 12345,
             'rev': 369411,
@@ -235,8 +232,8 @@ class AutoLLVMBisectionTest(unittest.TestCase):
       auto_llvm_bisection.GetBuildResult(chroot_path, buildbucket_id)
 
     self.assertEqual(
-        str(err.exception),
-        '"cros buildresult" return value is invalid: %s' % invalid_build_status)
+        str(err.exception), '"cros buildresult" return value is invalid: %s' %
+        invalid_build_status)
 
     mock_chroot_command.assert_called_once_with(
         [

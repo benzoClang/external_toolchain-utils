@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2020 The Chromium OS Authors. All rights reserved.
+# Copyright 2020 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -18,21 +18,19 @@ class Test(unittest.TestCase):
   """Tests for upload_lexan_crashes_to_forcey."""
 
   def test_date_parsing_functions(self):
-    self.assertEqual(
-        datetime.date(2020, 2, 1),
-        upload_lexan_crashes_to_forcey.from_ymd('2020-02-01'))
+    self.assertEqual(datetime.date(2020, 2, 1),
+                     upload_lexan_crashes_to_forcey.from_ymd('2020-02-01'))
 
-  @unittest.mock.patch(
-      'upload_lexan_crashes_to_forcey.test_cases_on_or_after',
-      return_value=(
-          (
-              datetime.date(2020, 1, 1),
-              ('gs://test-case-1', 'gs://test-case-1.1'),
-          ),
-          (datetime.date(2020, 1, 2), ('gs://test-case-2',)),
-          (datetime.date(2020, 1, 1), ('gs://test-case-3',)),
-          (datetime.date(2020, 1, 4), ('gs://test-case-4',)),
-      ))
+  @unittest.mock.patch('upload_lexan_crashes_to_forcey.test_cases_on_or_after',
+                       return_value=(
+                           (
+                               datetime.date(2020, 1, 1),
+                               ('gs://test-case-1', 'gs://test-case-1.1'),
+                           ),
+                           (datetime.date(2020, 1, 2), ('gs://test-case-2', )),
+                           (datetime.date(2020, 1, 1), ('gs://test-case-3', )),
+                           (datetime.date(2020, 1, 4), ('gs://test-case-4', )),
+                       ))
   @unittest.mock.patch('upload_lexan_crashes_to_forcey.submit_test_case')
   @unittest.mock.patch('upload_lexan_crashes_to_forcey.persist_state')
   def test_new_test_case_submission_functions(self, persist_state_mock,
@@ -132,8 +130,8 @@ class Test(unittest.TestCase):
         # All we need is an empty file here.
         pass
 
-      with open(
-          os.path.join(tempdir, 'test_case.sh'), 'w', encoding='utf-8') as f:
+      with open(os.path.join(tempdir, 'test_case.sh'), 'w',
+                encoding='utf-8') as f:
         f.write('# Crash reproducer for clang version 9.0.0 (...)\n')
         f.write('clang something or other\n')
 

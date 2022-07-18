@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Copyright 2019 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -100,8 +100,8 @@ class UpdateTryjobStatusTest(unittest.TestCase):
     custom_script_path = '/abs/path/to/script.py'
     status_file_path = '/abs/path/to/status_file.json'
 
-    name_json_file = os.path.join(
-        os.path.dirname(status_file_path), 'tmpFile.json')
+    name_json_file = os.path.join(os.path.dirname(status_file_path),
+                                  'tmpFile.json')
 
     expected_error_message = (
         'Custom script %s exit code %d did not match '
@@ -142,7 +142,8 @@ class UpdateTryjobStatusTest(unittest.TestCase):
     # script.
     #
     # `Popen.communicate()` returns a tuple of `stdout` and `stderr`.
-    mock_exec_custom_script.return_value.communicate.return_value = (None, None)
+    mock_exec_custom_script.return_value.communicate.return_value = (None,
+                                                                     None)
 
     mock_exec_custom_script.return_value.returncode = (
         CustomScriptStatus.GOOD.value)
@@ -193,7 +194,9 @@ class UpdateTryjobStatusTest(unittest.TestCase):
 
   # Simulate the behavior of `FindTryjobIndex()` when the tryjob does not exist
   # in the status file.
-  @mock.patch.object(update_tryjob_status, 'FindTryjobIndex', return_value=None)
+  @mock.patch.object(update_tryjob_status,
+                     'FindTryjobIndex',
+                     return_value=None)
   def testNotFindTryjobIndexWhenUpdatingTryjobStatus(self,
                                                      mock_find_tryjob_index):
 
@@ -256,8 +259,8 @@ class UpdateTryjobStatusTest(unittest.TestCase):
       custom_script = None
 
       update_tryjob_status.UpdateTryjobStatus(revision_to_update,
-                                              TryjobStatus.GOOD, temp_json_file,
-                                              custom_script)
+                                              TryjobStatus.GOOD,
+                                              temp_json_file, custom_script)
 
       # Verify that the tryjob's 'status' has been updated in the status file.
       with open(temp_json_file) as status_file:
@@ -387,10 +390,9 @@ class UpdateTryjobStatusTest(unittest.TestCase):
     mock_find_tryjob_index.assert_called_once()
 
   @mock.patch.object(update_tryjob_status, 'FindTryjobIndex', return_value=0)
-  @mock.patch.object(
-      update_tryjob_status,
-      'GetCustomScriptResult',
-      return_value=TryjobStatus.SKIP.value)
+  @mock.patch.object(update_tryjob_status,
+                     'GetCustomScriptResult',
+                     return_value=TryjobStatus.SKIP.value)
   def testUpdatedTryjobStatusToAutoPassedWithCustomScript(
       self, mock_get_custom_script_result, mock_find_tryjob_index):
     bisect_test_contents = {
@@ -434,8 +436,8 @@ class UpdateTryjobStatusTest(unittest.TestCase):
   # Simulate the behavior of `FindTryjobIndex()` when the tryjob exists in the
   # status file.
   @mock.patch.object(update_tryjob_status, 'FindTryjobIndex', return_value=0)
-  def testSetStatusDoesNotExistWhenUpdatingTryjobStatus(self,
-                                                        mock_find_tryjob_index):
+  def testSetStatusDoesNotExistWhenUpdatingTryjobStatus(
+      self, mock_find_tryjob_index):
 
     bisect_test_contents = {
         'start': 369410,
@@ -466,9 +468,8 @@ class UpdateTryjobStatusTest(unittest.TestCase):
                                                 nonexistent_update_status,
                                                 temp_json_file, custom_script)
 
-      self.assertEqual(
-          str(err.exception),
-          'Invalid "set_status" option provided: revert_status')
+      self.assertEqual(str(err.exception),
+                       'Invalid "set_status" option provided: revert_status')
 
     mock_find_tryjob_index.assert_called_once()
 

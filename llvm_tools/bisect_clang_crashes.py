@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2020 The Chromium OS Authors. All rights reserved.
+# Copyright 2020 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Fetches and submits the artifacts from Chrome OS toolchain's crash bucket.
+"""Fetches and submits the artifacts from ChromeOS toolchain's crash bucket.
 """
 
 import argparse
@@ -64,12 +64,13 @@ def main(argv):
   )
   cur_dir = os.path.dirname(os.path.abspath(__file__))
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument(
-      '--4c', dest='forcey', required=True, help='Path to a 4c client binary')
-  parser.add_argument(
-      '--state_file',
-      default=os.path.join(cur_dir, 'chromeos-state.json'),
-      help='The path to the state file.')
+  parser.add_argument('--4c',
+                      dest='forcey',
+                      required=True,
+                      help='Path to a 4c client binary')
+  parser.add_argument('--state_file',
+                      default=os.path.join(cur_dir, 'chromeos-state.json'),
+                      help='The path to the state file.')
   parser.add_argument(
       '--nocleanup',
       action='store_false',
@@ -81,8 +82,9 @@ def main(argv):
   os.makedirs(os.path.dirname(state_file), exist_ok=True)
   temporary_directory = '/tmp/bisect_clang_crashes'
   os.makedirs(temporary_directory, exist_ok=True)
-  urls = get_artifacts('gs://chromeos-toolchain-artifacts/clang-crash-diagnoses'
-                       '/**/*clang_crash_diagnoses.tar.xz')
+  urls = get_artifacts(
+      'gs://chromeos-toolchain-artifacts/clang-crash-diagnoses'
+      '/**/*clang_crash_diagnoses.tar.xz')
   logging.info('%d crash URLs found', len(urls))
 
   visited = {}

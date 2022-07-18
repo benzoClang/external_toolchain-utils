@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2020 The Chromium OS Authors. All rights reserved.
+# Copyright 2020 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -27,11 +27,11 @@ def ensure_up_to_date():
 
   checkout = get_location()
   if not os.path.isdir(checkout):
-    print(
-        'No llvm-project exists locally; syncing it. This takes a while.',
-        file=sys.stderr)
+    print('No llvm-project exists locally; syncing it. This takes a while.',
+          file=sys.stderr)
     actual_checkout = get_llvm_hash.GetAndUpdateLLVMProjectInLLVMTools()
-    assert checkout == actual_checkout, '%s != %s' % (actual_checkout, checkout)
+    assert checkout == actual_checkout, '%s != %s' % (actual_checkout,
+                                                      checkout)
 
   commit_timestamp = subprocess.check_output(
       [
@@ -52,13 +52,13 @@ def ensure_up_to_date():
   if time_since_last_commit <= datetime.timedelta(days=2):
     return
 
-  print(
-      '%d days have elapsed since the last commit to %s; auto-syncing' %
-      (time_since_last_commit.days, checkout),
-      file=sys.stderr)
-
-  result = subprocess.run(['git', 'fetch', 'origin'], check=False, cwd=checkout)
-  if result.returncode:
-    print(
-        'Sync failed somehow; hoping that things are fresh enough, then...',
+  print('%d days have elapsed since the last commit to %s; auto-syncing' %
+        (time_since_last_commit.days, checkout),
         file=sys.stderr)
+
+  result = subprocess.run(['git', 'fetch', 'origin'],
+                          check=False,
+                          cwd=checkout)
+  if result.returncode:
+    print('Sync failed somehow; hoping that things are fresh enough, then...',
+          file=sys.stderr)

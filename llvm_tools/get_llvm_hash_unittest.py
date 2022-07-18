@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Copyright 2019 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -20,7 +20,6 @@ from get_llvm_hash import LLVMHash
 
 
 def MakeMockPopen(return_code):
-
   def MockPopen(*_args, **_kwargs):
     result = mock.MagicMock()
     result.returncode = return_code
@@ -61,8 +60,8 @@ class TestGetLLVMHash(unittest.TestCase):
   def testGetGitHashWorks(self, mock_get_git_hash):
     mock_get_git_hash.return_value = 'a13testhash2'
 
-    self.assertEqual(
-        get_llvm_hash.GetGitHashFrom('/tmp/tmpTest', 100), 'a13testhash2')
+    self.assertEqual(get_llvm_hash.GetGitHashFrom('/tmp/tmpTest', 100),
+                     'a13testhash2')
 
     mock_get_git_hash.assert_called_once()
 
@@ -92,14 +91,14 @@ class TestGetLLVMHash(unittest.TestCase):
 
   @mock.patch.object(subprocess, 'Popen')
   def testCheckoutBranch(self, mock_popen):
-    mock_popen.return_value = mock.MagicMock(
-        communicate=lambda: (None, None), returncode=0)
+    mock_popen.return_value = mock.MagicMock(communicate=lambda: (None, None),
+                                             returncode=0)
     get_llvm_hash.CheckoutBranch('fake/src_dir', 'fake_branch')
     self.assertEqual(
         mock_popen.call_args_list[0][0],
-        (['git', '-C', 'fake/src_dir', 'checkout', 'fake_branch'],))
+        (['git', '-C', 'fake/src_dir', 'checkout', 'fake_branch'], ))
     self.assertEqual(mock_popen.call_args_list[1][0],
-                     (['git', '-C', 'fake/src_dir', 'pull'],))
+                     (['git', '-C', 'fake/src_dir', 'pull'], ))
 
   def testParseLLVMMajorVersion(self):
     cmakelist_42 = ('set(CMAKE_BUILD_WITH_INSTALL_NAME_DIR ON)\n'
@@ -117,10 +116,9 @@ class TestGetLLVMHash(unittest.TestCase):
   @mock.patch.object(get_llvm_hash, 'ParseLLVMMajorVersion')
   @mock.patch.object(get_llvm_hash, 'CheckCommand')
   @mock.patch.object(get_llvm_hash, 'CheckoutBranch')
-  @mock.patch(
-      'get_llvm_hash.open',
-      mock.mock_open(read_data='mock contents'),
-      create=True)
+  @mock.patch('get_llvm_hash.open',
+              mock.mock_open(read_data='mock contents'),
+              create=True)
   def testGetLLVMMajorVersion(self, mock_checkout_branch, mock_git_checkout,
                               mock_major_version, mock_llvm_project_path):
     mock_llvm_project_path.return_value = 'path/to/llvm-project'
@@ -132,7 +130,8 @@ class TestGetLLVMHash(unittest.TestCase):
     mock_major_version.assert_called_with('mock contents')
     mock_git_checkout.assert_called_once_with(
         ['git', '-C', 'path/to/llvm-project', 'checkout', '314159265'])
-    mock_checkout_branch.assert_called_once_with('path/to/llvm-project', 'main')
+    mock_checkout_branch.assert_called_once_with('path/to/llvm-project',
+                                                 'main')
 
 
 if __name__ == '__main__':

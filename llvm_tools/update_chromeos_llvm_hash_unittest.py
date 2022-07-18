@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Copyright 2019 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -11,7 +11,6 @@ from __future__ import print_function
 import collections
 import datetime
 import os
-import re
 import subprocess
 import unittest
 import unittest.mock as mock
@@ -58,8 +57,8 @@ class UpdateLLVMHashTest(unittest.TestCase):
       update_chromeos_llvm_hash.UpdateEbuildLLVMHash(ebuild_path, llvm_variant,
                                                      git_hash, svn_version)
 
-    self.assertEqual(
-        str(err.exception), 'Invalid ebuild path provided: %s' % ebuild_path)
+    self.assertEqual(str(err.exception),
+                     'Invalid ebuild path provided: %s' % ebuild_path)
 
     mock_isfile.assert_called_once()
 
@@ -195,8 +194,8 @@ class UpdateLLVMHashTest(unittest.TestCase):
 
   @mock.patch.object(get_llvm_hash, 'GetLLVMMajorVersion')
   @mock.patch.object(os.path, 'islink', return_value=False)
-  def testFailedToUprevEbuildToVersionForInvalidSymlink(self, mock_islink,
-                                                        mock_llvm_version):
+  def testFailedToUprevEbuildToVersionForInvalidSymlink(
+      self, mock_islink, mock_llvm_version):
     symlink_path = '/path/to/chroot/package/package.ebuild'
     svn_version = 1000
     git_hash = 'badf00d'
@@ -207,8 +206,8 @@ class UpdateLLVMHashTest(unittest.TestCase):
       update_chromeos_llvm_hash.UprevEbuildToVersion(symlink_path, svn_version,
                                                      git_hash)
 
-    self.assertEqual(
-        str(err.exception), 'Invalid symlink provided: %s' % symlink_path)
+    self.assertEqual(str(err.exception),
+                     'Invalid symlink provided: %s' % symlink_path)
 
     mock_islink.assert_called_once()
     mock_llvm_version.assert_not_called()
@@ -221,8 +220,8 @@ class UpdateLLVMHashTest(unittest.TestCase):
     with self.assertRaises(ValueError) as err:
       update_chromeos_llvm_hash.UprevEbuildSymlink(symlink_path)
 
-    self.assertEqual(
-        str(err.exception), 'Invalid symlink provided: %s' % symlink_path)
+    self.assertEqual(str(err.exception),
+                     'Invalid symlink provided: %s' % symlink_path)
 
     mock_islink.assert_called_once()
 
@@ -418,8 +417,8 @@ class UpdateLLVMHashTest(unittest.TestCase):
   @mock.patch.object(update_chromeos_llvm_hash,
                      'GetEbuildPathsFromSymLinkPaths')
   def testSuccessfullyCreatedPathDictionaryFromPackages(
-      self, mock_ebuild_paths_from_symlink_paths, mock_chroot_paths_to_symlinks,
-      mock_get_chroot_paths):
+      self, mock_ebuild_paths_from_symlink_paths,
+      mock_chroot_paths_to_symlinks, mock_get_chroot_paths):
 
     package_chroot_path = '/mnt/host/source/src/path/to/package-r1.ebuild'
 
@@ -662,12 +661,10 @@ class UpdateLLVMHashTest(unittest.TestCase):
     # Verify exception is raised when an exception is thrown within
     # the 'try' block by UprevEbuildSymlink function.
     with self.assertRaises(ValueError) as err:
-      update_chromeos_llvm_hash.UpdatePackages(packages_to_update, llvm_variant,
-                                               git_hash, svn_version,
-                                               chroot_path, patch_metadata_file,
-                                               failure_modes.FailureModes.FAIL,
-                                               git_hash_source,
-                                               extra_commit_msg)
+      update_chromeos_llvm_hash.UpdatePackages(
+          packages_to_update, llvm_variant, git_hash, svn_version, chroot_path,
+          patch_metadata_file, failure_modes.FailureModes.FAIL,
+          git_hash_source, extra_commit_msg)
 
     self.assertEqual(str(err.exception), 'Failed to uprev the ebuild.')
 
@@ -698,12 +695,11 @@ class UpdateLLVMHashTest(unittest.TestCase):
   @mock.patch.object(llvm_patch_management, 'UpdatePackagesPatchMetadataFile')
   @mock.patch.object(update_chromeos_llvm_hash,
                      'StagePatchMetadataFileForCommit')
-  def testSuccessfullyUpdatedPackages(self, mock_stage_patch_file,
-                                      mock_update_package_metadata_file,
-                                      mock_delete_repo, mock_upload_changes,
-                                      mock_uprev_symlink, mock_update_llvm_next,
-                                      mock_create_repo, mock_create_path_dict,
-                                      mock_llvm_version, mock_mask_contains):
+  def testSuccessfullyUpdatedPackages(
+      self, mock_stage_patch_file, mock_update_package_metadata_file,
+      mock_delete_repo, mock_upload_changes, mock_uprev_symlink,
+      mock_update_llvm_next, mock_create_repo, mock_create_path_dict,
+      mock_llvm_version, mock_mask_contains):
 
     path_to_package_dir = '/some/path/to/chroot/src/path/to'
     abs_path_to_package = os.path.join(path_to_package_dir, 'package.ebuild')
@@ -848,7 +844,8 @@ class UpdateLLVMHashTest(unittest.TestCase):
         'update_chromeos_llvm_hash.open',
         mock.mock_open(read_data='\n=sys-devel/llvm-1234.0_pre*\n'),
         create=True) as mock_file:
-      update_chromeos_llvm_hash.EnsurePackageMaskContains(chroot_path, git_hash)
+      update_chromeos_llvm_hash.EnsurePackageMaskContains(
+          chroot_path, git_hash)
       handle = mock_file()
       handle.write.assert_not_called()
     mock_llvm_version.assert_called_once_with(git_hash)
@@ -865,11 +862,11 @@ class UpdateLLVMHashTest(unittest.TestCase):
     chroot_path = 'absolute/path/to/chroot'
     git_hash = 'badf00d'
     mock_llvm_version.return_value = '1234'
-    with mock.patch(
-        'update_chromeos_llvm_hash.open',
-        mock.mock_open(read_data='nothing relevant'),
-        create=True) as mock_file:
-      update_chromeos_llvm_hash.EnsurePackageMaskContains(chroot_path, git_hash)
+    with mock.patch('update_chromeos_llvm_hash.open',
+                    mock.mock_open(read_data='nothing relevant'),
+                    create=True) as mock_file:
+      update_chromeos_llvm_hash.EnsurePackageMaskContains(
+          chroot_path, git_hash)
       handle = mock_file()
       handle.write.assert_called_once_with('=sys-devel/llvm-1234.0_pre*\n')
     mock_llvm_version.assert_called_once_with(git_hash)

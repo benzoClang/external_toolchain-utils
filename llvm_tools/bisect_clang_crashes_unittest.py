@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2020 The Chromium OS Authors. All rights reserved.
+# Copyright 2020 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -63,7 +63,6 @@ class Test(unittest.TestCase):
   @mock.patch.object(glob, 'glob')
   def test_get_crash_reproducers_no_matching_script(self, mock_file_search,
                                                     mock_file_check):
-
     def silence_logging():
       root = logging.getLogger()
       filt = self._SilencingFilter()

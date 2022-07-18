@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Copyright 2019 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -23,7 +23,12 @@ def parse_args():
       choices=['cros.hardened', 'cros.nonhardened', 'cros.host', 'android'])
   parser.add_argument('--use_ccache', required=True, choices=['true', 'false'])
   parser.add_argument(
-      '--use_llvm_next', required=True, choices=['true', 'false'])
+      '--version_suffix',
+      help='A string appended to the computed version of the wrapper. This '
+      'is appeneded directly without any delimiter.')
+  parser.add_argument('--use_llvm_next',
+                      required=True,
+                      choices=['true', 'false'])
   parser.add_argument('--output_file', required=True, type=str)
   parser.add_argument(
       '--static',
@@ -41,6 +46,11 @@ def parse_args():
 
 
 def calc_go_args(args, version, build_dir):
+  # These seem unnecessary, and might lead to breakages with Go's ldflag
+  # parsing. Don't allow them.
+  if "'" in version:
+    raise ValueError('`version` should not contain single quotes')
+
   ldFlags = [
       '-X',
       'main.ConfigName=' + args.config,
@@ -49,10 +59,11 @@ def calc_go_args(args, version, build_dir):
       '-X',
       'main.UseLlvmNext=' + args.use_llvm_next,
       '-X',
-      'main.Version=' + version,
+      # Quote this, as `version` may have spaces in it.
+      "'main.Version=" + version + "'",
   ]
 
-  # If the wrapper is intended for Chrome OS, we need to use libc's exec.
+  # If the wrapper is intended for ChromeOS, we need to use libc's exec.
   extra_args = []
   if not args.static:
     extra_args += ['-tags', 'libc_exec']
@@ -60,8 +71,8 @@ def calc_go_args(args, version, build_dir):
   if args.config == 'android':
     # If android_llvm_next_flags.go DNE, we'll get an obscure "no
     # llvmNextFlags" build error; complaining here is clearer.
-    if not os.path.exists(
-        os.path.join(build_dir, 'android_llvm_next_flags.go')):
+    if not os.path.exists(os.path.join(build_dir,
+                                       'android_llvm_next_flags.go')):
       sys.exit('In order to build the Android wrapper, you must have a local '
                'android_llvm_next_flags.go file; please see '
                'cros_llvm_next_flags.go.')
@@ -92,6 +103,8 @@ def main():
   args = parse_args()
   build_dir = os.path.dirname(__file__)
   version = read_version(build_dir)
+  if args.version_suffix:
+    version += args.version_suffix
   # Note: Go does not support using absolute package names.
   # So we run go inside the directory of the the build file.
   sys.exit(

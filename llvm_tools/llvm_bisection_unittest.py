@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Copyright 2019 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -128,7 +128,8 @@ class LLVMBisectionTest(unittest.TestCase):
     mock_get_git_hash.side_effect = revs
 
     git_hashes = [
-        git_llvm_rev.base_llvm_revision + 3, git_llvm_rev.base_llvm_revision + 5
+        git_llvm_rev.base_llvm_revision + 3,
+        git_llvm_rev.base_llvm_revision + 5
     ]
 
     self.assertEqual(
@@ -160,9 +161,8 @@ class LLVMBisectionTest(unittest.TestCase):
 
     last_tested = '/abs/path/to/file_that_does_not_exist.json'
 
-    self.assertEqual(
-        llvm_bisection.LoadStatusFile(last_tested, start, end),
-        expected_bisect_state)
+    self.assertEqual(llvm_bisection.LoadStatusFile(last_tested, start, end),
+                     expected_bisect_state)
 
   @mock.patch.object(modify_a_tryjob, 'AddTryjob')
   def testBisectPassed(self, mock_add_tryjob):
@@ -173,9 +173,9 @@ class LLVMBisectionTest(unittest.TestCase):
     # Simulate behavior of `AddTryjob()` when successfully launched a tryjob for
     # the updated packages.
     @test_helpers.CallCountsToMockFunctions
-    def MockAddTryjob(call_count, _packages, _git_hash, _revision, _chroot_path,
-                      _patch_file, _extra_cls, _options, _builder, _verbose,
-                      _svn_revision):
+    def MockAddTryjob(call_count, _packages, _git_hash, _revision,
+                      _chroot_path, _patch_file, _extra_cls, _options,
+                      _builder, _verbose, _svn_revision):
 
       if call_count < 2:
         return {'rev': revisions_list[call_count], 'status': 'pending'}
@@ -208,17 +208,18 @@ class LLVMBisectionTest(unittest.TestCase):
       # Verify that the status file is updated when an exception happened when
       # attempting to launch a revision (i.e. progress is not lost).
       with self.assertRaises(ValueError) as err:
-        llvm_bisection.Bisect(revisions_list, git_hash_list, bisection_contents,
-                              temp_json_file, packages, args_output.chroot_path,
-                              patch_file, args_output.extra_change_lists,
+        llvm_bisection.Bisect(revisions_list, git_hash_list,
+                              bisection_contents, temp_json_file, packages,
+                              args_output.chroot_path, patch_file,
+                              args_output.extra_change_lists,
                               args_output.options, args_output.builders,
                               args_output.verbose)
 
       expected_bisection_contents = {
           'start':
-              start,
+          start,
           'end':
-              end,
+          end,
           'jobs': [{
               'rev': revisions_list[0],
               'status': 'pending'
@@ -240,8 +241,9 @@ class LLVMBisectionTest(unittest.TestCase):
     self.assertEqual(mock_add_tryjob.call_count, 3)
 
   @mock.patch.object(subprocess, 'check_output', return_value=None)
-  @mock.patch.object(
-      get_llvm_hash.LLVMHash, 'GetLLVMHash', return_value='a123testhash4')
+  @mock.patch.object(get_llvm_hash.LLVMHash,
+                     'GetLLVMHash',
+                     return_value='a123testhash4')
   @mock.patch.object(llvm_bisection, 'GetCommitsBetween')
   @mock.patch.object(llvm_bisection, 'GetRemainingRange')
   @mock.patch.object(llvm_bisection, 'LoadStatusFile')
@@ -331,9 +333,10 @@ class LLVMBisectionTest(unittest.TestCase):
     with self.assertRaises(ValueError) as err:
       llvm_bisection.main(args_output)
 
-    error_message = (f'The start {start} or the end {end} version provided is '
-                     f'different than "start" {bisect_state["start"]} or "end" '
-                     f'{bisect_state["end"]} in the .JSON file')
+    error_message = (
+        f'The start {start} or the end {end} version provided is '
+        f'different than "start" {bisect_state["start"]} or "end" '
+        f'{bisect_state["end"]} in the .JSON file')
 
     self.assertEqual(str(err.exception), error_message)
 
@@ -448,8 +451,9 @@ class LLVMBisectionTest(unittest.TestCase):
     mock_get_revision_and_hash_list.assert_called_once()
 
   @mock.patch.object(subprocess, 'check_output', return_value=None)
-  @mock.patch.object(
-      get_llvm_hash.LLVMHash, 'GetLLVMHash', return_value='a123testhash4')
+  @mock.patch.object(get_llvm_hash.LLVMHash,
+                     'GetLLVMHash',
+                     return_value='a123testhash4')
   @mock.patch.object(llvm_bisection, 'GetCommitsBetween')
   @mock.patch.object(llvm_bisection, 'GetRemainingRange')
   @mock.patch.object(llvm_bisection, 'LoadStatusFile')

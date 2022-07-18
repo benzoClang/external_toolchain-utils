@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Copyright 2019 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -91,7 +91,8 @@ def ParseLLVMMajorVersion(cmakelist):
   Raises:
     ValueError: The major version cannot be parsed from cmakelist
   """
-  match = re.search(r'\n\s+set\(LLVM_VERSION_MAJOR (?P<major>\d+)\)', cmakelist)
+  match = re.search(r'\n\s+set\(LLVM_VERSION_MAJOR (?P<major>\d+)\)',
+                    cmakelist)
   if not match:
     raise ValueError('Failed to parse CMakeList for llvm major version')
   return match.group('major')
@@ -158,8 +159,8 @@ def CreateTempLLVMRepo(temp_dir):
   finally:
     if os.path.isdir(temp_dir):
       check_output([
-          'git', '-C', abs_path_to_llvm_project_dir, 'worktree', 'remove', '-f',
-          temp_dir
+          'git', '-C', abs_path_to_llvm_project_dir, 'worktree', 'remove',
+          '-f', temp_dir
       ])
 
 
@@ -189,11 +190,10 @@ def GetAndUpdateLLVMProjectInLLVMTools():
                                               'llvm-project-copy')
 
   if not os.path.isdir(abs_path_to_llvm_project_dir):
-    print(
-        (f'Checking out LLVM to {abs_path_to_llvm_project_dir}\n'
-         'so that we can map between commit hashes and revision numbers.\n'
-         'This may take a while, but only has to be done once.'),
-        file=sys.stderr)
+    print((f'Checking out LLVM to {abs_path_to_llvm_project_dir}\n'
+           'so that we can map between commit hashes and revision numbers.\n'
+           'This may take a while, but only has to be done once.'),
+          file=sys.stderr)
     os.mkdir(abs_path_to_llvm_project_dir)
 
     LLVMHash().CloneLLVMRepo(abs_path_to_llvm_project_dir)
@@ -240,7 +240,8 @@ def GetGoogle3LLVMVersion(stable):
   git_hash = check_output(cmd)
 
   # Change type to an integer
-  return GetVersionFrom(GetAndUpdateLLVMProjectInLLVMTools(), git_hash.rstrip())
+  return GetVersionFrom(GetAndUpdateLLVMProjectInLLVMTools(),
+                        git_hash.rstrip())
 
 
 def IsSvnOption(svn_option):

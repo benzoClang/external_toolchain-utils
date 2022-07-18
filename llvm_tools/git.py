@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2020 The Chromium OS Authors. All rights reserved.
+# Copyright 2020 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -131,5 +131,5 @@ def UploadChanges(repo, branch, commit_messages, reviewers=None, cc=None):
   if not found_url:
     raise ValueError('Failed to find change list URL.')
 
-  return CommitContents(
-      url=found_url.group(0), cl_number=int(found_url.group(1)))
+  return CommitContents(url=found_url.group(0),
+                        cl_number=int(found_url.group(1)))

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Copyright 2019 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -15,11 +15,10 @@ import getpass
 import os
 import sys
 
-import file_lock_machine
-
 from cros_utils import command_executer
 from cros_utils import logger
 from cros_utils import machines
+import file_lock_machine
 
 
 class LockException(Exception):
@@ -62,7 +61,7 @@ class LockManager(object):
   CROSFLEET_CREDENTIAL = ('/usr/local/google/home/mobiletc-prebuild'
                           '/sheriff_utils/credentials/skylab'
                           '/chromeos-swarming-credential.json')
-  SWARMING = 'chromite/third_party/swarming.client/swarming.py'
+  SWARMING = '~/cipd_binaries/swarming'
   SUCCESS = 0
 
   def __init__(self,
@@ -377,14 +376,11 @@ class LockManager(object):
     """
     credential = ''
     if os.path.exists(self.CROSFLEET_CREDENTIAL):
-      credential = '--auth-service-account-json %s' % self.CROSFLEET_CREDENTIAL
-    swarming = os.path.join(self.chromeos_root, self.SWARMING)
-    # TODO(zhizhouy): Swarming script doesn't support python3 so explicitly
-    # launch it with python2 until migrated.
-    cmd = (('python2 %s '
-            'query --swarming https://chromeos-swarming.appspot.com '
-            "%s 'bots/list?is_dead=FALSE&dimensions=dut_name:%s'") %
-           (swarming, credential, machine.rstrip('.cros')))
+      credential = '--service-account-json %s' % self.CROSFLEET_CREDENTIAL
+    server = '--server https://chromeos-swarming.appspot.com'
+    dimensions = '--dimension dut_name=%s' % machine.rstrip('.cros')
+
+    cmd = f'{self.SWARMING} bots {server} {credential} {dimensions}'
     exit_code, stdout, stderr = self.ce.RunCommandWOutput(cmd)
     if exit_code:
       raise ValueError('Querying bots failed (2); stdout: %r; stderr: %r' %
@@ -398,7 +394,7 @@ class LockManager(object):
     #  }
     # Otherwise there will be a tuple starting with 'items', we simply detect
     # this keyword for result.
-    return 'items' in stdout
+    return stdout != '[]'
 
   def LeaseCrosfleetMachine(self, machine):
     """Run command to lease dut from crosfleet.
@@ -410,8 +406,8 @@ class LockManager(object):
     if os.path.exists(self.CROSFLEET_CREDENTIAL):
       credential = '-service-account-json %s' % self.CROSFLEET_CREDENTIAL
     cmd = (('%s dut lease -minutes %s %s %s %s') %
-           (self.CROSFLEET_PATH, self.LEASE_MINS, credential, '-host'
-            if '.cros' in machine else '-board', machine.rstrip('.cros')))
+           (self.CROSFLEET_PATH, self.LEASE_MINS, credential, '-host',
+            machine.rstrip('.cros')))
     # Wait 8 minutes for server to start the lease task, if not started,
     # we will treat it as unavailable.
     check_interval_time = 480
@@ -427,6 +423,7 @@ class LockManager(object):
     credential = ''
     if os.path.exists(self.CROSFLEET_CREDENTIAL):
       credential = '-service-account-json %s' % self.CROSFLEET_CREDENTIAL
+
     cmd = (('%s dut abandon %s %s') %
            (self.CROSFLEET_PATH, credential, machine.rstrip('.cros')))
     retval = self.ce.RunCommand(cmd)

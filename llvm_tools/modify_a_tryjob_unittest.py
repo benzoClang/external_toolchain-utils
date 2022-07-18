@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Copyright 2019 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -42,14 +42,17 @@ class ModifyATryjobTest(unittest.TestCase):
       with self.assertRaises(SystemExit) as err:
         modify_a_tryjob.PerformTryjobModification(
             revision_to_modify, modify_a_tryjob.ModifyTryjob.REMOVE,
-            temp_json_file, args_output.extra_change_lists, args_output.options,
-            args_output.builders, args_output.chroot_path, args_output.verbose)
+            temp_json_file, args_output.extra_change_lists,
+            args_output.options, args_output.builders, args_output.chroot_path,
+            args_output.verbose)
 
       self.assertEqual(str(err.exception), 'No tryjobs in %s' % temp_json_file)
 
   # Simulate the behavior of `FindTryjobIndex()` when the index of the tryjob
   # was not found.
-  @mock.patch.object(update_tryjob_status, 'FindTryjobIndex', return_value=None)
+  @mock.patch.object(update_tryjob_status,
+                     'FindTryjobIndex',
+                     return_value=None)
   def testNoTryjobIndexFound(self, mock_find_tryjob_index):
     bisect_test_contents = {
         'start': 369410,
@@ -78,8 +81,9 @@ class ModifyATryjobTest(unittest.TestCase):
       with self.assertRaises(ValueError) as err:
         modify_a_tryjob.PerformTryjobModification(
             revision_to_modify, modify_a_tryjob.ModifyTryjob.REMOVE,
-            temp_json_file, args_output.extra_change_lists, args_output.options,
-            args_output.builders, args_output.chroot_path, args_output.verbose)
+            temp_json_file, args_output.extra_change_lists,
+            args_output.options, args_output.builders, args_output.chroot_path,
+            args_output.verbose)
 
       self.assertEqual(
           str(err.exception), 'Unable to find tryjob for %d in %s' %
@@ -139,9 +143,9 @@ class ModifyATryjobTest(unittest.TestCase):
 
     bisect_test_contents = {
         'start':
-            369410,
+        369410,
         'end':
-            369420,
+        369420,
         'jobs': [{
             'rev': 369411,
             'status': 'bad',
@@ -185,9 +189,9 @@ class ModifyATryjobTest(unittest.TestCase):
 
         expected_file_contents = {
             'start':
-                369410,
+            369410,
             'end':
-                369420,
+            369420,
             'jobs': [{
                 'rev': 369411,
                 'status': 'pending',
@@ -249,7 +253,9 @@ class ModifyATryjobTest(unittest.TestCase):
     mock_find_tryjob_index.assert_called_once()
 
   # Simulate the behavior of `FindTryjobIndex()` when the tryjob was not found.
-  @mock.patch.object(update_tryjob_status, 'FindTryjobIndex', return_value=None)
+  @mock.patch.object(update_tryjob_status,
+                     'FindTryjobIndex',
+                     return_value=None)
   def testSuccessfullyDidNotAddTryjobOutsideOfBisectionBounds(
       self, mock_find_tryjob_index):
 
@@ -282,8 +288,8 @@ class ModifyATryjobTest(unittest.TestCase):
             args_output.extra_change_lists, args_output.options,
             args_output.builders, args_output.chroot_path, args_output.verbose)
 
-      self.assertEqual(
-          str(err.exception), 'Failed to add tryjob to %s' % temp_json_file)
+      self.assertEqual(str(err.exception),
+                       'Failed to add tryjob to %s' % temp_json_file)
 
     mock_find_tryjob_index.assert_called_once()
 
@@ -292,12 +298,13 @@ class ModifyATryjobTest(unittest.TestCase):
   @mock.patch.object(modify_a_tryjob, 'AddTryjob')
   # Simulate the behavior of `GetLLVMHashAndVersionFromSVNOption()` when
   # successfully retrieved the git hash of the revision to launch a tryjob for.
-  @mock.patch.object(
-      get_llvm_hash,
-      'GetLLVMHashAndVersionFromSVNOption',
-      return_value=('a123testhash1', 369418))
+  @mock.patch.object(get_llvm_hash,
+                     'GetLLVMHashAndVersionFromSVNOption',
+                     return_value=('a123testhash1', 369418))
   # Simulate the behavior of `FindTryjobIndex()` when the tryjob was not found.
-  @mock.patch.object(update_tryjob_status, 'FindTryjobIndex', return_value=None)
+  @mock.patch.object(update_tryjob_status,
+                     'FindTryjobIndex',
+                     return_value=None)
   def testSuccessfullyAddedTryjob(self, mock_find_tryjob_index,
                                   mock_get_llvm_hash, mock_add_tryjob):
 
@@ -391,9 +398,8 @@ class ModifyATryjobTest(unittest.TestCase):
             args_output.extra_change_lists, args_output.options,
             args_output.builders, args_output.chroot_path, args_output.verbose)
 
-      self.assertEqual(
-          str(err.exception),
-          'Invalid "modify_tryjob" option provided: remove_link')
+      self.assertEqual(str(err.exception),
+                       'Invalid "modify_tryjob" option provided: remove_link')
 
       mock_find_tryjob_index.assert_called_once()
 

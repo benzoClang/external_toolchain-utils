@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2020 The Chromium OS Authors. All rights reserved.
+# Copyright 2020 The ChromiumOS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -68,15 +68,19 @@ def load_manifest_versions(manifest: Path) -> Dict[str, str]:
 
 def main():
   parser = argparse.ArgumentParser(
-      description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-  parser.add_argument(
-      '-d', '--debug', action='store_true', help='Emit debugging output')
+      description=__doc__,
+      formatter_class=argparse.RawDescriptionHelpFormatter)
+  parser.add_argument('-d',
+                      '--debug',
+                      action='store_true',
+                      help='Emit debugging output')
   parser.add_argument(
       '-n',
       '--number',
       type=int,
       default=20,
-      help='Number of recent manifests to fetch info about. 0 means unlimited.')
+      help='Number of recent manifests to fetch info about. 0 means unlimited.'
+  )
   args = parser.parse_args()
 
   is_debug = args.debug
