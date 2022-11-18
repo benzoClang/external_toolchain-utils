@@ -2,6 +2,5 @@ bob           : chromeos8-row12-rack16-host2
 chell         : chromeos2-row1-rack10-host2    chromeos2-row1-rack10-host4
 coral         : chromeos6-row5-rack6-host1     chromeos6-row5-rack6-host3    chromeos6-row5-rack6-host5
 elm           : chromeos6-row14-rack15-host21
-kefka         : chromeos6-row6-rack22-host2    chromeos6-row6-rack22-host3   chromeos6-row11-rack22-host7
 nautilus      : chromeos6-row5-rack10-host1    chromeos6-row5-rack10-host3
 snappy        : chromeos8-row12-rack17-host1        chromeos8-row12-rack17-host2

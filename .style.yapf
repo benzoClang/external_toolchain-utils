@@ -1,6 +1,0 @@
-[style]
-based_on_style = pep8
-split_before_bitwise_operator = false
-blank_line_before_module_docstring = true
-blank_lines_between_top_level_imports_and_variables = 2
-indent_width = 2

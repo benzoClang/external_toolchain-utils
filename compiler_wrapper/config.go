@@ -1,4 +1,4 @@
-// Copyright 2019 The ChromiumOS Authors. All rights reserved.
+// Copyright 2019 The ChromiumOS Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -164,6 +164,8 @@ var crosHardenedConfig = config{
 		"-Wno-section",
 		"-fno-addrsig",
 		"-fuse-ld=lld",
+		"-ftrivial-auto-var-init=zero",
+		"-enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang",
 	),
 	clangPostFlags:    crosCommonClangPostFlags(),
 	newWarningsDir:    "/tmp/fatal_clang_warnings",

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2022 The ChromiumOS Authors.
+# Copyright 2022 The ChromiumOS Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -58,107 +58,120 @@ import toml
 
 
 def run(args: List[str]) -> bool:
-  result = subprocess.run(args,
-                          stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE,
-                          check=False)
-  return result.returncode == 0
+    result = subprocess.run(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False
+    )
+    return result.returncode == 0
 
 
 def run_check(args: List[str]):
-  subprocess.run(args,
-                 stdout=subprocess.PIPE,
-                 stderr=subprocess.PIPE,
-                 check=True)
+    subprocess.run(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True
+    )
 
 
 def gs_address_exists(address: str) -> bool:
-  # returns False if the file isn't there
-  return run(['gsutil.py', 'ls', address])
+    # returns False if the file isn't there
+    return run(["gsutil.py", "ls", address])
 
 
 def crate_already_uploaded(crate_name: str, crate_version: str) -> bool:
-  filename = f'{crate_name}-{crate_version}.crate'
-  return gs_address_exists(
-      f'gs://chromeos-localmirror/distfiles/{filename}') or gs_address_exists(
-          f'gs://chromeos-mirror/gentoo/distfiles/{filename}')
+    filename = f"{crate_name}-{crate_version}.crate"
+    return gs_address_exists(
+        f"gs://chromeos-localmirror/distfiles/{filename}"
+    ) or gs_address_exists(f"gs://chromeos-mirror/gentoo/distfiles/{filename}")
 
 
 def download_crate(crate_name: str, crate_version: str, localpath: Path):
-  urllib.request.urlretrieve(
-      f'https://crates.io/api/v1/crates/{crate_name}/{crate_version}/download',
-      localpath)
+    urllib.request.urlretrieve(
+        f"https://crates.io/api/v1/crates/{crate_name}/{crate_version}/download",
+        localpath,
+    )
 
 
 def upload_crate(crate_name: str, crate_version: str, localpath: Path):
-  run_check([
-      'gsutil.py', 'cp', '-n', '-a', 'public-read',
-      str(localpath),
-      f'gs://chromeos-localmirror/distfiles/{crate_name}-{crate_version}.crate'
-  ])
+    run_check(
+        [
+            "gsutil.py",
+            "cp",
+            "-n",
+            "-a",
+            "public-read",
+            str(localpath),
+            f"gs://chromeos-localmirror/distfiles/{crate_name}-{crate_version}.crate",
+        ]
+    )
 
 
 def main():
-  parser = argparse.ArgumentParser(
-      description='Help prepare a Rust crate for an ebuild.')
-  parser.add_argument('--lockfile',
-                      type=str,
-                      required=True,
-                      help='Path to the lockfile of the crate in question.')
-  parser.add_argument(
-      '--ignore',
-      type=str,
-      action='append',
-      required=False,
-      default=[],
-      help='Ignore the crate by this name (may be used multiple times).')
-  parser.add_argument(
-      '--dry-run',
-      action='store_true',
-      help="Don't actually download/upload crates, just print their names.")
-  ns = parser.parse_args()
+    parser = argparse.ArgumentParser(
+        description="Help prepare a Rust crate for an ebuild."
+    )
+    parser.add_argument(
+        "--lockfile",
+        type=str,
+        required=True,
+        help="Path to the lockfile of the crate in question.",
+    )
+    parser.add_argument(
+        "--ignore",
+        type=str,
+        action="append",
+        required=False,
+        default=[],
+        help="Ignore the crate by this name (may be used multiple times).",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Don't actually download/upload crates, just print their names.",
+    )
+    ns = parser.parse_args()
 
-  to_ignore = set(ns.ignore)
+    to_ignore = set(ns.ignore)
 
-  toml_contents = toml.load(ns.lockfile)
-  packages = toml_contents['package']
+    toml_contents = toml.load(ns.lockfile)
+    packages = toml_contents["package"]
 
-  crates = [(pkg['name'], pkg['version']) for pkg in packages
-            if pkg['name'] not in to_ignore]
-  crates.sort()
+    crates = [
+        (pkg["name"], pkg["version"])
+        for pkg in packages
+        if pkg["name"] not in to_ignore
+    ]
+    crates.sort()
 
-  print('Dependent crates:')
-  for name, version in crates:
-    print(f'{name}-{version}')
-  print()
+    print("Dependent crates:")
+    for name, version in crates:
+        print(f"{name}-{version}")
+    print()
 
-  if ns.dry_run:
-    print('Crates that would be uploaded (skipping ones already uploaded):')
-  else:
-    print('Uploading crates (skipping ones already uploaded):')
+    if ns.dry_run:
+        print("Crates that would be uploaded (skipping ones already uploaded):")
+    else:
+        print("Uploading crates (skipping ones already uploaded):")
 
-  def maybe_upload(crate: Tuple[str, str]) -> str:
-    name, version = crate
-    if crate_already_uploaded(name, version):
-      return ''
-    if not ns.dry_run:
-      with tempfile.TemporaryDirectory() as temp_dir:
-        path = Path(temp_dir.name, f'{name}-{version}.crate')
-        download_crate(name, version, path)
-        upload_crate(name, version, path)
-    return f'{name}-{version}'
+    def maybe_upload(crate: Tuple[str, str]) -> str:
+        name, version = crate
+        if crate_already_uploaded(name, version):
+            return ""
+        if not ns.dry_run:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                path = Path(temp_dir.name, f"{name}-{version}.crate")
+                download_crate(name, version, path)
+                upload_crate(name, version, path)
+        return f"{name}-{version}"
 
-  # Simple benchmarking on my machine with rust-analyzer's Cargo.lock, using
-  # the --dry-run option, gives a wall time of 277 seconds with max_workers=1
-  # and 70 seconds with max_workers=4.
-  with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-    crates_len = len(crates)
-    for i, s in enumerate(executor.map(maybe_upload, crates)):
-      if s:
-        j = i + 1
-        print(f'[{j}/{crates_len}] {s}')
-  print()
+    # Simple benchmarking on my machine with rust-analyzer's Cargo.lock, using
+    # the --dry-run option, gives a wall time of 277 seconds with max_workers=1
+    # and 70 seconds with max_workers=4.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        crates_len = len(crates)
+        for i, s in enumerate(executor.map(maybe_upload, crates)):
+            if s:
+                j = i + 1
+                print(f"[{j}/{crates_len}] {s}")
+    print()
 
 
-if __name__ == '__main__':
-  main()
+if __name__ == "__main__":
+    main()

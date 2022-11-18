@@ -1,4 +1,4 @@
-// Copyright 2019 The ChromiumOS Authors. All rights reserved.
+// Copyright 2019 The ChromiumOS Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -76,7 +76,7 @@ func runCmdWithTimeout(env env, cmd *command, t time.Duration) error {
 	cmdCtx.Stderr = env.stderr()
 
 	if err := cmdCtx.Start(); err != nil {
-		return newErrorwithSourceLocf("exec error: %v", err)
+		return fmt.Errorf("exec error: %w", err)
 	}
 	err := cmdCtx.Wait()
 	if ctx.Err() == nil {

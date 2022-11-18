@@ -19,10 +19,9 @@ password)**
 ### Usage
 
 This script is used for updating a package's LLVM hash (sys-devel/llvm,
-sys-libs/compiler-rt, sys-libs/libcxx, sys-libs/libcxxabi, and
-sys-libs/llvm-libunwind) and then run tests after updating the git hash.
-There are three ways to test the change, including starting tryjobs,
-recipe builders or using cq+1.
+sys-libs/compiler-rt, sys-libs/libcxx, and sys-libs/llvm-libunwind)
+and then run tests after updating the git hash. There are three ways to test
+the change, including starting tryjobs, recipe builders or using cq+1.
 
 An example when this script should be run is when certain boards would like
 to be tested with the updated `LLVM_NEXT_HASH`.
@@ -118,7 +117,7 @@ For example, to create a roll CL to the git hash of revision 367622:
 ```
 $ ./update_chromeos_llvm_hash.py \
   --update_packages sys-devel/llvm sys-libs/compiler-rt \
-  sys-libs/libcxx sys-libs/libcxxabi sys-libs/llvm-libunwind \
+  sys-libs/libcxx sys-libs/llvm-libunwind \
   'dev-util/lldb-server' \
   --llvm_version 367622 \
   --failure_mode disable_patches
